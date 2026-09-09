@@ -26,7 +26,11 @@ from cryptography.hazmat.primitives import hashes
 
 def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
     """Check packaged bytes, Apple trust, timestamps, and the signing certificate."""
-    found = {path.name for path in directory.iterdir()}
+    found = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*")
+        if path.is_file()
+    }
     if found != set(binaries):
         raise ValueError(f"Unexpected packaged executables: {sorted(found)}")
     certificate = x509.load_pem_x509_certificate(
@@ -34,7 +38,7 @@ def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
     )
     expected_certificate = certificate.fingerprint(hashes.SHA256())
     with tempfile.TemporaryDirectory() as temporary:
-        for binary in binaries:
+        for index, binary in enumerate(binaries):
             path = directory / binary
             if (signed / binary).read_bytes() != path.read_bytes():
                 raise ValueError(
@@ -59,7 +63,7 @@ def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
             if not any(line.startswith("Timestamp=") for line in details.splitlines()):
                 raise ValueError(f"Missing signing timestamp: {binary}")
 
-            prefix = Path(temporary) / f"{binary}-cert-"
+            prefix = Path(temporary) / f"{index}-cert-"
             subprocess.run(
                 ["codesign", "--display", f"--extract-certificates={prefix}", path],
                 check=True,
