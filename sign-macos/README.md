@@ -52,6 +52,6 @@ Accepted tickets are retrieved online by Gatekeeper when users run the standalon
 executables, including copies installed from wheels. Tickets cannot be stapled
 to these executables.
 
-After packaging, use `verify-release-binaries-macos.py` from
-[`setup-release-signing`](../setup-release-signing/README.md) on macOS to compare
-the packaged bytes to the signed output and verify their signatures and certificate.
+Use [`assemble-signed-release`](../assemble-signed-release/README.md) to package
+the output, then [`verify-release`](../verify-release/README.md) on macOS to check
+the packaged bytes, signatures, and certificate.

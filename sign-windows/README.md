@@ -30,6 +30,6 @@ target layout and leaves the unsigned inputs untouched.
 The action uses SHA-256 for both file and timestamp digests and Microsoft's RFC
 3161 timestamp service. Dependency caching is disabled for release signing.
 
-After packaging, use `verify-release-binaries-windows.ps1` from
-[`setup-release-signing`](../setup-release-signing/README.md) to compare the
-packaged bytes to this action's output and verify their signatures again.
+Use [`assemble-signed-release`](../assemble-signed-release/README.md) to package
+the output, then [`verify-release`](../verify-release/README.md) on Windows to
+compare the packaged bytes to this action's output and verify their signatures again.
