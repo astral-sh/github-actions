@@ -1,0 +1,17 @@
+name: "Set up release signing scripts"
+description: "Make Astral's signing, notarization, and wheel utility scripts available."
+
+outputs:
+  scripts:
+    description: "Absolute path to the release signing scripts."
+    value: ${{ steps.locate.outputs.path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Locate release signing scripts"
+      id: locate
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: echo "path=$ACTION_PATH/scripts" >> "$GITHUB_OUTPUT"
