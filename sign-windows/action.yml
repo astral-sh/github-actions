@@ -1,9 +1,21 @@
 name: "Sign Windows executables"
-description: "Sign executables with Azure Artifact Signing and verify their publisher and timestamp."
+description: "Copy and sign all target directories with Azure Artifact Signing, then verify their publisher and timestamp."
 
 inputs:
-  directory:
-    description: "Directory containing executables to sign in place, including subdirectories."
+  unsigned-directory:
+    description: "Directory containing one subdirectory per target, with that target's executables."
+    required: true
+  signed-directory:
+    description: "New output directory for signed targets. Must not exist."
+    required: true
+  azure-client-id:
+    description: "Azure identity authorized to sign this release."
+    required: true
+  azure-tenant-id:
+    description: "Azure tenant containing the release identity."
+    required: true
+  azure-subscription-id:
+    description: "Azure subscription containing the signing resources."
     required: true
   endpoint:
     description: "Azure Artifact Signing endpoint."
@@ -21,13 +33,38 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: "Log in to Azure with GitHub OIDC"
+      uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+      env:
+        AZURE_CORE_OUTPUT: none
+      with:
+        client-id: ${{ inputs.azure-client-id }}
+        tenant-id: ${{ inputs.azure-tenant-id }}
+        subscription-id: ${{ inputs.azure-subscription-id }}
+
+    - name: "Copy executables for signing"
+      shell: pwsh
+      env:
+        UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        New-Item $env:SIGNED_DIRECTORY -ItemType Directory | Out-Null
+        foreach ($target in (Get-ChildItem -LiteralPath $env:UNSIGNED_DIRECTORY -Directory -Force)) {
+          $destination = Join-Path $env:SIGNED_DIRECTORY $target.Name
+          New-Item $destination -ItemType Directory | Out-Null
+          foreach ($binary in (Get-ChildItem -LiteralPath $target.FullName -File -Force)) {
+            Copy-Item -LiteralPath $binary.FullName -Destination $destination
+          }
+        }
+
     - name: "Sign executables with Azure Artifact Signing"
       uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
       with:
         endpoint: ${{ inputs.endpoint }}
         signing-account-name: ${{ inputs.signing-account-name }}
         certificate-profile-name: ${{ inputs.certificate-profile-name }}
-        files-folder: ${{ inputs.directory }}
+        files-folder: ${{ inputs.signed-directory }}
         files-folder-filter: exe
         files-folder-recurse: true
         file-digest: SHA256
@@ -42,6 +79,6 @@ runs:
       shell: pwsh
       env:
         ACTION_PATH: ${{ github.action_path }}
-        BINARY_DIRECTORY: ${{ inputs.directory }}
+        BINARY_DIRECTORY: ${{ inputs.signed-directory }}
         CERTIFICATE_SUBJECT: ${{ inputs.certificate-subject }}
       run: '& "$env:ACTION_PATH/verify-signatures.ps1" -Directory $env:BINARY_DIRECTORY -CertificateSubject $env:CERTIFICATE_SUBJECT'
