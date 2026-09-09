@@ -1,0 +1,47 @@
+name: "Sign Windows executables"
+description: "Sign executables with Azure Artifact Signing and verify their publisher and timestamp."
+
+inputs:
+  directory:
+    description: "Directory containing executables to sign in place, including subdirectories."
+    required: true
+  endpoint:
+    description: "Azure Artifact Signing endpoint."
+    required: true
+  signing-account-name:
+    description: "Azure Artifact Signing account."
+    required: true
+  certificate-profile-name:
+    description: "Certificate profile in the signing account."
+    required: true
+  certificate-subject:
+    description: "Expected Authenticode signer certificate subject."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Sign executables with Azure Artifact Signing"
+      uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+      with:
+        endpoint: ${{ inputs.endpoint }}
+        signing-account-name: ${{ inputs.signing-account-name }}
+        certificate-profile-name: ${{ inputs.certificate-profile-name }}
+        files-folder: ${{ inputs.directory }}
+        files-folder-filter: exe
+        files-folder-recurse: true
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+        exclude-environment-credential: true
+        exclude-azure-cli-credential: false
+        cache-dependencies: false
+        trace: false
+
+    - name: "Verify signed executable identities"
+      shell: pwsh
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        BINARY_DIRECTORY: ${{ inputs.directory }}
+        CERTIFICATE_SUBJECT: ${{ inputs.certificate-subject }}
+      run: '& "$env:ACTION_PATH/verify-signatures.ps1" -Directory $env:BINARY_DIRECTORY -CertificateSubject $env:CERTIFICATE_SUBJECT'
