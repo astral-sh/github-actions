@@ -1,0 +1,29 @@
+name: "Assemble signed release artifacts"
+description: "Inject signed executables into wheels and GitHub archives and regenerate their records and checksums."
+
+inputs:
+  targets:
+    description: "The JSON target declarations used to prepare signing inputs."
+    required: true
+  prepared-directory:
+    description: "Directory containing the prepared wheels and original GitHub archives."
+    required: true
+  signed-directory:
+    description: "Directory containing one signed executable directory per target."
+    required: true
+  output-directory:
+    description: "New directory for signed wheels, PyPI package directories, and GitHub archives. Must not exist."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Assemble signed release artifacts"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RELEASE_TARGETS: ${{ inputs.targets }}
+        PREPARED_DIRECTORY: ${{ inputs.prepared-directory }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+      run: uv run --locked "$ACTION_PATH/../release-artifacts/assemble.py" "$PREPARED_DIRECTORY" "$SIGNED_DIRECTORY" "$OUTPUT_DIRECTORY"
