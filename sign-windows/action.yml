@@ -53,8 +53,11 @@ runs:
         foreach ($target in (Get-ChildItem -LiteralPath $env:UNSIGNED_DIRECTORY -Directory -Force)) {
           $destination = Join-Path $env:SIGNED_DIRECTORY $target.Name
           New-Item $destination -ItemType Directory | Out-Null
-          foreach ($binary in (Get-ChildItem -LiteralPath $target.FullName -File -Force)) {
-            Copy-Item -LiteralPath $binary.FullName -Destination $destination
+          foreach ($binary in (Get-ChildItem -LiteralPath $target.FullName -File -Recurse -Force)) {
+            $relative = [System.IO.Path]::GetRelativePath($target.FullName, $binary.FullName)
+            $output = Join-Path $destination $relative
+            New-Item (Split-Path $output) -ItemType Directory -Force | Out-Null
+            Copy-Item -LiteralPath $binary.FullName -Destination $output
           }
         }
 
@@ -65,7 +68,7 @@ runs:
         signing-account-name: ${{ inputs.signing-account-name }}
         certificate-profile-name: ${{ inputs.certificate-profile-name }}
         files-folder: ${{ inputs.signed-directory }}
-        files-folder-filter: exe
+        files-folder-filter: exe,dll,pyd
         files-folder-recurse: true
         file-digest: SHA256
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
