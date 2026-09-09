@@ -6,7 +6,12 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Sign macOS binaries with Azure Key Vault."""
+"""Sign macOS executables from all target directories with Azure Key Vault.
+
+The input contains one directory per target, each holding its executables.
+The new output directory preserves this layout and includes the signing
+certificate in each target directory.
+"""
 
 import argparse
 import hashlib
@@ -96,7 +101,7 @@ def certificate_sha256(path: Path) -> str:
 
 
 def sign_binaries(unsigned: Path, signed: Path) -> None:
-    """Download the pinned signing components and certificate, then sign the input binaries."""
+    """Download the pinned components and certificate once, then sign every target."""
     required = (
         "STORAGE_ACCOUNT",
         "STORAGE_CONTAINER",
@@ -144,31 +149,35 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
             raise ValueError("Signing certificate SHA-256 mismatch")
 
         signed.mkdir()
-        shutil.copyfile(certificate, signed / "certificate.pem")
-        for source in sorted(unsigned.iterdir()):
-            binary = source.name
-            try:
-                subprocess.run(
-                    [
-                        rcodesign,
-                        "sign",
-                        "--config-file",
-                        "/dev/null",
-                        "--pkcs11-library",
-                        pkcs11,
-                        "--pkcs11-certificate-file",
-                        certificate,
-                        "--pkcs11-key-label",
-                        os.environ["KEY_NAME"],
-                        "--code-signature-flags",
-                        "runtime",
-                        source,
-                        signed / binary,
-                    ],
-                    check=True,
-                )
-            except subprocess.CalledProcessError:
-                raise RuntimeError(f"Signing {binary} failed") from None
+        for target in sorted(unsigned.iterdir()):
+            destination = signed / target.name
+            destination.mkdir()
+            shutil.copyfile(certificate, destination / "certificate.pem")
+            for source in sorted(target.iterdir()):
+                try:
+                    subprocess.run(
+                        [
+                            rcodesign,
+                            "sign",
+                            "--config-file",
+                            "/dev/null",
+                            "--pkcs11-library",
+                            pkcs11,
+                            "--pkcs11-certificate-file",
+                            certificate,
+                            "--pkcs11-key-label",
+                            os.environ["KEY_NAME"],
+                            "--code-signature-flags",
+                            "runtime",
+                            source,
+                            destination / source.name,
+                        ],
+                        check=True,
+                    )
+                except subprocess.CalledProcessError:
+                    raise RuntimeError(
+                        f"Signing {target.name}/{source.name} failed"
+                    ) from None
 
 
 def main() -> None:
