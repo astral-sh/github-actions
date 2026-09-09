@@ -1,0 +1,22 @@
+name: "Verify packaged native binaries"
+description: "Compare a directory of packaged binaries with the signing output and verify their native signatures."
+
+inputs:
+  signed-directory:
+    description: "One target's output from the signing action."
+    required: true
+  binaries-directory:
+    description: "Directory containing only the packaged native binaries, with the same relative paths."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Verify packaged native binaries"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PYTHONPATH: ${{ github.action_path }}/../release-artifacts
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        BINARIES_DIRECTORY: ${{ inputs.binaries-directory }}
+      run: uv run --locked "$ACTION_PATH/../release-artifacts/verify-binaries.py" "$SIGNED_DIRECTORY" "$BINARIES_DIRECTORY"

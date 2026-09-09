@@ -1,0 +1,21 @@
+name: "Prepare release signing inputs"
+description: "Extract declared wheel executables and require matching GitHub archive contents."
+
+inputs:
+  targets:
+    description: "JSON array of release targets, wheel packages, and expected GitHub archive members."
+    required: true
+  output-directory:
+    description: "New directory for unsigned target executables and original assembly inputs. Must not exist."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Prepare release signing inputs"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RELEASE_TARGETS: ${{ inputs.targets }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+      run: uv run --locked "$ACTION_PATH/../release-artifacts/prepare.py" "$OUTPUT_DIRECTORY"
