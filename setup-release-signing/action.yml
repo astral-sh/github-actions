@@ -1,5 +1,5 @@
-name: "Set up release signing scripts"
-description: "Make Astral's signing, notarization, and wheel utility scripts available."
+name: "Set up release artifact utilities"
+description: "Make Astral's wheel transforms and native signature verification scripts available."
 
 outputs:
   scripts:

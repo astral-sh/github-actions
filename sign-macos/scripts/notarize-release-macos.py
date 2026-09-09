@@ -9,8 +9,8 @@
 
 Apple scans software for malware and signing issues. On acceptance, it publishes
 tickets that Gatekeeper can retrieve online when users run the binaries.
-Standalone executables cannot have tickets stapled to them, so these releases rely on
-that online lookup even when the binaries are distributed in wheels or archives.
+Standalone executables cannot have tickets stapled to them, so these releases
+rely on that online lookup even when distributed in wheels or archives.
 
 This script uploads all signed macOS targets and waits for Apple's result.
 It authenticates to the Notary API using an App Store Connect key in Azure Key

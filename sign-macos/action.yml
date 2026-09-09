@@ -1,0 +1,100 @@
+name: "Sign and notarize macOS executables"
+description: "Sign all target directories through Azure Key Vault and wait for Apple notarization."
+
+inputs:
+  unsigned-directory:
+    description: "Directory containing one subdirectory per target, with that target's executables."
+    required: true
+  signed-directory:
+    description: "New output directory for signed targets and their certificates. Must not exist."
+    required: true
+  azure-client-id:
+    description: "Azure identity authorized to sign this release."
+    required: true
+  azure-tenant-id:
+    description: "Azure tenant containing the release identity."
+    required: true
+  azure-subscription-id:
+    description: "Azure subscription containing the signing resources."
+    required: true
+  storage-account:
+    description: "Azure storage account containing the signing components."
+    required: true
+  storage-container:
+    description: "Blob container containing the signing components."
+    required: true
+  component-rcodesign-blob:
+    description: "Blob containing the Linux x86_64 rcodesign executable."
+    required: true
+  component-rcodesign-sha256:
+    description: "SHA-256 digest of the rcodesign executable."
+    required: true
+  component-pkcs11-blob:
+    description: "Blob containing the Linux x86_64 Azure Key Vault PKCS#11 library."
+    required: true
+  component-pkcs11-sha256:
+    description: "SHA-256 digest of the PKCS#11 library."
+    required: true
+  azure-keyvault-name:
+    description: "Azure Key Vault containing the signing certificate and notarization key."
+    required: true
+  azure-keyvault-key-version:
+    description: "Version of the signing certificate to download."
+    required: true
+  key-name:
+    description: "Name of the signing certificate and key."
+    required: true
+  certificate-sha256:
+    description: "Expected SHA-256 fingerprint of the signing certificate's DER encoding."
+    required: true
+  apple-notarization-akv-key-name:
+    description: "Azure Key Vault key for App Store Connect, tagged with apple-key-id and apple-issuer-id."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Install uv"
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      with:
+        version: "0.12.10"
+        checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+        enable-cache: false
+
+    - name: "Log in to Azure with GitHub OIDC"
+      uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+      env:
+        AZURE_CORE_OUTPUT: none
+      with:
+        client-id: ${{ inputs.azure-client-id }}
+        tenant-id: ${{ inputs.azure-tenant-id }}
+        subscription-id: ${{ inputs.azure-subscription-id }}
+
+    - name: "Sign macOS executables"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        STORAGE_ACCOUNT: ${{ inputs.storage-account }}
+        STORAGE_CONTAINER: ${{ inputs.storage-container }}
+        # rcodesign reads RCODESIGN_* as configuration; use a distinct prefix.
+        COMPONENT_RCODESIGN_BLOB: ${{ inputs.component-rcodesign-blob }}
+        COMPONENT_RCODESIGN_SHA256: ${{ inputs.component-rcodesign-sha256 }}
+        COMPONENT_PKCS11_BLOB: ${{ inputs.component-pkcs11-blob }}
+        COMPONENT_PKCS11_SHA256: ${{ inputs.component-pkcs11-sha256 }}
+        AZURE_CREDENTIAL_KIND: azurecli
+        AZURE_KEYVAULT_NAME: ${{ inputs.azure-keyvault-name }}
+        AZURE_KEYVAULT_KEY_VERSION: ${{ inputs.azure-keyvault-key-version }}
+        KEY_NAME: ${{ inputs.key-name }}
+        CERTIFICATE_SHA256: ${{ inputs.certificate-sha256 }}
+      run: uv run --locked "$ACTION_PATH/scripts/sign-release-macos.py" "$UNSIGNED_DIRECTORY" "$SIGNED_DIRECTORY"
+
+    - name: "Notarize signed macOS executables"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        AZURE_KEYVAULT_NAME: ${{ inputs.azure-keyvault-name }}
+        APPLE_NOTARIZATION_AKV_KEY_NAME: ${{ inputs.apple-notarization-akv-key-name }}
+      run: uv run --locked "$ACTION_PATH/scripts/notarize-release-macos.py" "$SIGNED_DIRECTORY"
