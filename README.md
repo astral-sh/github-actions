@@ -11,6 +11,8 @@ Shared GitHub Actions for Astral projects.
   executables into wheels and GitHub archives, updating records and checksums.
 - [Verify signed releases](verify-release/README.md): check packaged bytes and
   signatures on native runners.
+- [Verify packaged binaries](verify-binaries/README.md): use the same native
+  checks with a project's own archive adapter.
 
 The caller supplies [artifact declarations](release-artifacts/README.md), release
 approval, runner selection, artifact transfers, and project-specific smoke tests.
