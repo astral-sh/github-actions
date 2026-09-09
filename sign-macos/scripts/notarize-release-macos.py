@@ -158,7 +158,9 @@ def notarize(signed: Path) -> None:
         archive = Path(temporary) / "notarization.zip"
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as output:
             for target in sorted(signed.iterdir()):
-                for path in sorted(target.iterdir()):
+                for path in sorted(target.rglob("*")):
+                    if not path.is_file() or path == target / "certificate.pem":
+                        continue
                     path.chmod(0o755)
                     output.write(path, path.relative_to(signed))
 

@@ -8,6 +8,12 @@ inputs:
   signed-directory:
     description: "New output directory for signed targets and their certificates. Must not exist."
     required: true
+  entitlements-file:
+    description: "Optional plist containing entitlements for the named executable paths."
+    default: ""
+  entitlements-binaries:
+    description: "JSON array of executable paths, relative to each target directory, that receive the entitlements."
+    default: "[]"
   azure-client-id:
     description: "Azure identity authorized to sign this release."
     required: true
@@ -76,6 +82,8 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        ENTITLEMENTS_FILE: ${{ inputs.entitlements-file }}
+        ENTITLEMENTS_BINARIES: ${{ inputs.entitlements-binaries }}
         STORAGE_ACCOUNT: ${{ inputs.storage-account }}
         STORAGE_CONTAINER: ${{ inputs.storage-container }}
         # rcodesign reads RCODESIGN_* as configuration; use a distinct prefix.

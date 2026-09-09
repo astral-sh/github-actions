@@ -15,6 +15,7 @@ certificate in each target directory.
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -118,6 +119,11 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         if not os.environ.get(name):
             raise ValueError(f"Missing signing configuration: {name}")
 
+    entitlements = os.environ.get("ENTITLEMENTS_FILE", "")
+    entitled_binaries = set(json.loads(os.environ.get("ENTITLEMENTS_BINARIES", "[]")))
+    if bool(entitlements) != bool(entitled_binaries):
+        raise ValueError("Provide both an entitlements file and its executable paths")
+
     with tempfile.TemporaryDirectory() as temporary:
         components = Path(temporary)
         certificate = components / "certificate.pem"
@@ -153,7 +159,21 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
             destination = signed / target.name
             destination.mkdir()
             shutil.copyfile(certificate, destination / "certificate.pem")
-            for source in sorted(target.iterdir()):
+            sources = {
+                source.relative_to(target).as_posix(): source
+                for source in target.rglob("*")
+                if source.is_file()
+            }
+            if not entitled_binaries <= sources.keys():
+                raise ValueError(f"Missing entitled executables in {target.name}")
+            for relative, source in sorted(sources.items()):
+                output = destination / relative
+                output.parent.mkdir(parents=True, exist_ok=True)
+                options = (
+                    ["--entitlements-xml-file", entitlements]
+                    if relative in entitled_binaries
+                    else []
+                )
                 try:
                     subprocess.run(
                         [
@@ -169,14 +189,15 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             os.environ["KEY_NAME"],
                             "--code-signature-flags",
                             "runtime",
+                            *options,
                             source,
-                            destination / source.name,
+                            output,
                         ],
                         check=True,
                     )
                 except subprocess.CalledProcessError:
                     raise RuntimeError(
-                        f"Signing {target.name}/{source.name} failed"
+                        f"Signing {target.name}/{relative} failed"
                     ) from None
 
 

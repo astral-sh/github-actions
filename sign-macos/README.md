@@ -33,14 +33,20 @@ caller.
 
 Pin the action to a commit. Both directory paths are relative to the workspace
 unless absolute. The input must contain one subdirectory per target, holding only
-that target's executables. The output directory must not exist. It preserves the
-target layout and includes `certificate.pem` in every target directory for later
-verification. The unsigned inputs are preserved.
+that target's executables and libraries, including subdirectories. The output
+directory must not exist. It preserves the target layout and includes
+`certificate.pem` in every target directory for later verification. The unsigned
+inputs are preserved.
 
 The action downloads `rcodesign`, the Azure Key Vault PKCS#11 library, and the
 signing certificate once for all targets. It verifies the component SHA-256
 digests and certificate fingerprint before signing with the hardened runtime.
 Private signing keys remain in Azure Key Vault.
+
+Projects that host third-party code, such as Python, can pass an
+`entitlements-file` plist and an `entitlements-binaries` JSON array. The array
+lists executable paths relative to each target directory. Entitlements are applied
+only to those files; shared libraries inherit their host process's entitlements.
 
 The notarization key is an App Store Connect key in the same vault, with Azure
 tags `apple-key-id` and `apple-issuer-id`. The action resolves its current version
