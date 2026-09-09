@@ -10,10 +10,11 @@ param(
     [Parameter(Mandatory)]
     [string] $BinaryDirectory,
     [Parameter(Mandatory)]
-    [string[]] $Binaries
+    [string] $BinariesJson
 )
 
 $ErrorActionPreference = 'Stop'
+$Binaries = @($BinariesJson | ConvertFrom-Json)
 
 $architecture = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'x64' }
 $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$architecture\signtool.exe" |

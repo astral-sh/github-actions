@@ -1,0 +1,29 @@
+name: "Verify signed release artifacts"
+description: "Check wheel and GitHub archive inventories, exact signed bytes, and native signatures for one target."
+
+inputs:
+  target:
+    description: "One JSON target declaration from the preparation inputs."
+    required: true
+  signed-directory:
+    description: "The signing action's output directory for this target."
+    required: true
+  wheels-directory:
+    description: "Directory containing this target's assembled signed wheels."
+    required: true
+  github-archives-directory:
+    description: "Directory containing the assembled GitHub archive and its checksum sidecar."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Verify signed release artifacts"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        WHEELS_DIRECTORY: ${{ inputs.wheels-directory }}
+        GITHUB_ARCHIVES_DIRECTORY: ${{ inputs.github-archives-directory }}
+      run: uv run --locked "$ACTION_PATH/../release-artifacts/verify.py" "$SIGNED_DIRECTORY" "$WHEELS_DIRECTORY" "$GITHUB_ARCHIVES_DIRECTORY"
