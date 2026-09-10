@@ -1,0 +1,47 @@
+name: "Collect Docker image manifest"
+description: "Collect a complete set of saved image records for a separate publishing job."
+
+inputs:
+  base-name:
+    description: "Name of the binary-only base image."
+    required: true
+  image-mappings:
+    description: "JSON array of the expected variant image mappings."
+    default: "[]"
+  artifact-prefix:
+    description: "Prefix used for the per-image artifacts."
+    default: "docker-image"
+  artifact-name:
+    description: "Name of the assembled manifest artifact."
+    default: "docker-manifest"
+
+outputs:
+  artifact-id:
+    description: "Artifact ID for the assembled Docker image manifest."
+    value: ${{ steps.upload.outputs.artifact-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        pattern: ${{ inputs.artifact-prefix }}-*
+        path: ${{ runner.temp }}/docker-image-records
+        merge-multiple: false
+
+    - name: "Assemble image manifest"
+      id: manifest
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        BASE_NAME: ${{ inputs.base-name }}
+        IMAGE_MAPPINGS: ${{ inputs.image-mappings }}
+        RECORDS_PATH: ${{ runner.temp }}/docker-image-records
+      run: bash "$ACTION_PATH/assemble.sh"
+
+    - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      id: upload
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.manifest.outputs.path }}
+        overwrite: true

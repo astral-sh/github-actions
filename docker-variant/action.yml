@@ -1,0 +1,53 @@
+name: "Prepare Docker image variant"
+description: "Generate a Dockerfile and metadata tag rules for a binary-only image variant."
+
+inputs:
+  image-mapping:
+    description: "Base image followed by one or more comma-separated image aliases."
+    required: true
+  source-image:
+    description: "Image containing the binaries, preferably pinned to a digest."
+    required: true
+  binaries:
+    description: "Space-separated binary names at the root of the source image."
+    required: true
+  command:
+    description: "Default command, selected from the binary names."
+    required: true
+  dockerfile-lines:
+    description: "Additional Dockerfile instructions after copying the binaries."
+    default: ""
+  version:
+    description: "Release version or dry-run."
+    required: true
+  push-dev:
+    description: "Generate SHA tags instead of release tags."
+    default: "false"
+
+outputs:
+  name:
+    description: "First image alias, used as the manifest record name."
+    value: ${{ steps.prepare.outputs.name }}
+  file:
+    description: "Generated Dockerfile path."
+    value: ${{ steps.prepare.outputs.file }}
+  tags:
+    description: "Tag rules for docker-build."
+    value: ${{ steps.prepare.outputs.tags }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Generate Dockerfile and tags"
+      id: prepare
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        IMAGE_MAPPING: ${{ inputs.image-mapping }}
+        SOURCE_IMAGE: ${{ inputs.source-image }}
+        BINARIES: ${{ inputs.binaries }}
+        COMMAND: ${{ inputs.command }}
+        DOCKERFILE_LINES: ${{ inputs.dockerfile-lines }}
+        VERSION: ${{ inputs.version }}
+        PUSH_DEV: ${{ inputs.push-dev }}
+      run: bash "$ACTION_PATH/prepare.sh"
