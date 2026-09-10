@@ -1,0 +1,27 @@
+name: "Test Docker actions"
+
+on:
+  pull_request:
+    paths:
+      - "docker-*/**"
+      - "tests/**"
+      - ".github/workflows/test-docker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-*/**"
+      - "tests/**"
+      - ".github/workflows/test-docker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests
+      - run: shellcheck docker-*/*.sh

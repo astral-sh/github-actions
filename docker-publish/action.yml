@@ -1,0 +1,56 @@
+name: "Publish Docker image"
+description: "Publish and attest a saved Depot image without rebuilding it."
+
+inputs:
+  project:
+    description: "Depot project ID selected by the trusted publishing workflow."
+    required: true
+  image:
+    description: "Saved image record from the Docker build manifest."
+    required: true
+  images:
+    description: "Newline-separated allowed destination image repositories."
+    required: true
+  attestation-image:
+    description: "Allowed destination repository to attest, such as ghcr.io/astral-sh/uv."
+    required: true
+
+outputs:
+  digest:
+    description: "Final annotated digest for the attestation image."
+    value: ${{ steps.publish.outputs.digest }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+
+    - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      with:
+        # `imagetools create --metadata-file` identifies the annotated index
+        # without racing a mutable tag.
+        version: v0.33.0
+        cache-binary: false
+
+    - name: "Copy saved image and publish tags"
+      id: publish
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        DEPOT_PROJECT_ID: ${{ inputs.project }}
+        IMAGE_JSON: ${{ inputs.image }}
+        IMAGES: ${{ inputs.images }}
+        ATTESTATION_IMAGE: ${{ inputs.attestation-image }}
+      run: bash "$ACTION_PATH/publish.sh"
+
+    - name: "Attest original image"
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-name: ${{ inputs.attestation-image }}
+        subject-digest: ${{ fromJson(inputs.image).digest }}
+
+    - name: "Attest published image"
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-name: ${{ inputs.attestation-image }}
+        subject-digest: ${{ steps.publish.outputs.digest }}

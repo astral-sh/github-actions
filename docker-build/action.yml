@@ -1,0 +1,104 @@
+name: "Build Docker image"
+description: "Build a multi-platform image in Depot and record its immutable release candidate."
+
+inputs:
+  name:
+    description: "Unique name for this image in the build manifest."
+    required: true
+  project:
+    description: "Depot project ID."
+    required: true
+  images:
+    description: "Newline-separated destination image repositories."
+    required: true
+  tags:
+    description: "Tag rules for docker/metadata-action."
+    required: true
+  flavor:
+    description: "Flavor rules for docker/metadata-action."
+    default: ""
+  context:
+    description: "Docker build context."
+    default: "."
+  file:
+    description: "Path to the Dockerfile."
+    default: "Dockerfile"
+  platforms:
+    description: "Comma-separated Docker platforms."
+    default: "linux/amd64,linux/arm64"
+  save:
+    description: "Save the image in Depot Registry and upload its record."
+    default: "false"
+  pull-build-id:
+    description: "Optional saved build in this Depot project to authenticate pulls from."
+    default: ""
+  artifact-prefix:
+    description: "Prefix for per-image artifact names."
+    default: "docker-image"
+
+outputs:
+  build-id:
+    description: "Depot build ID."
+    value: ${{ steps.build.outputs.build-id }}
+  digest:
+    description: "Original multi-platform image digest."
+    value: ${{ steps.build.outputs.digest }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461 # v1.7.1
+
+    - name: "Authenticate to Depot Registry"
+      if: inputs.pull-build-id != ''
+      shell: bash
+      env:
+        DEPOT_PROJECT_ID: ${{ inputs.project }}
+        BUILD_ID: ${{ inputs.pull-build-id }}
+      run: |
+        token="$(depot pull-token --project "$DEPOT_PROJECT_ID" "$BUILD_ID")"
+        echo "::add-mask::$token"
+        printf '%s' "$token" | docker login registry.depot.dev --username x-token --password-stdin
+
+    - name: "Extract image metadata"
+      id: meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      env:
+        DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+      with:
+        images: ${{ inputs.images }}
+        tags: ${{ inputs.tags }}
+        flavor: ${{ inputs.flavor }}
+
+    - name: "Build and save image"
+      id: build
+      uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1.18.0
+      with:
+        project: ${{ inputs.project }}
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        save: ${{ inputs.save }}
+        labels: ${{ steps.meta.outputs.labels }}
+        provenance: mode=max
+        sbom: true
+
+    - name: "Record image"
+      id: record
+      if: inputs.save == 'true'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        NAME: ${{ inputs.name }}
+        BUILD_ID: ${{ steps.build.outputs.build-id }}
+        DIGEST: ${{ steps.build.outputs.digest }}
+        TAGS: ${{ steps.meta.outputs.tags }}
+        ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
+      run: bash "$ACTION_PATH/record.sh"
+
+    - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      if: inputs.save == 'true'
+      with:
+        name: ${{ inputs.artifact-prefix }}-${{ inputs.name }}
+        path: ${{ steps.record.outputs.path }}
+        overwrite: true
