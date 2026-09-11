@@ -1,0 +1,12 @@
+name: Plan nextest shards
+description: Convert a positive shard count into a GitHub Actions matrix.
+inputs:
+  shards:
+    description: Number of shards, from 1 through 256.
+    required: true
+outputs:
+  partitions:
+    description: JSON array of one-based partition numbers.
+runs:
+  using: node24
+  main: index.mjs

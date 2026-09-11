@@ -1,0 +1,26 @@
+name: Run the nextest action fixture
+description: Repository-local entry point used by the reusable workflow tests.
+inputs:
+  partition:
+    default: "1"
+    description: One-based partition number.
+  partitions:
+    default: "1"
+    description: Total number of partitions.
+  save-cache:
+    default: "false"
+    description: Unused by this small fixture.
+runs:
+  using: composite
+  steps:
+    - name: Install Rust
+      shell: bash
+      run: rustup toolchain install stable --profile minimal
+    # Exercise the action from this test checkout, including unmerged changes.
+    - uses: ./nextest # zizmor: ignore[self-repository]
+      with:
+        name: fixture-${{ runner.os }}-${{ inputs.partitions }}
+        partition: ${{ inputs.partition }}
+        partitions: ${{ inputs.partitions }}
+        working-directory: nextest/tests/fixture
+        arguments: '["--profile", "ci"]'

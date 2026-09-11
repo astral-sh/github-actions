@@ -1,0 +1,56 @@
+name: Sharded nextest
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label for each shard.
+        type: string
+        default: ubuntu-latest
+      shards:
+        description: Number of independent nextest hash partitions.
+        type: number
+        default: 1
+      timeout-minutes:
+        description: Timeout for each shard.
+        type: number
+        default: 20
+      save-cache:
+        description: Whether the repository action may save its build cache.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: plan shards
+    runs-on: ubuntu-slim
+    outputs:
+      partitions: ${{ steps.plan.outputs.partitions }}
+    steps:
+      - uses: astral-sh/github-actions/nextest/plan@e6fe1b51adba9d0b2c847e503fce90e8fb765188
+        id: plan
+        with:
+          shards: ${{ inputs.shards }}
+
+  run:
+    needs: plan
+    name: shard ${{ matrix.partition }} of ${{ inputs.shards }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: ${{ fromJSON(needs.plan.outputs.partitions) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # This action belongs to the checked-out caller, not this workflow repository.
+      - uses: ./.github/actions/nextest # zizmor: ignore[self-repository]
+        with:
+          partition: ${{ matrix.partition }}
+          partitions: ${{ inputs.shards }}
+          save-cache: ${{ inputs.save-cache }}

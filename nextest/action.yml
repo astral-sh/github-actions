@@ -1,0 +1,63 @@
+name: Run nextest shard
+description: Run one nextest hash partition and collect its test artifacts.
+inputs:
+  name:
+    description: Unique artifact-name component for this test suite.
+    required: true
+  partition:
+    description: One-based partition number.
+    default: "1"
+  partitions:
+    description: Total number of partitions.
+    default: "1"
+  arguments:
+    description: JSON array of arguments for cargo nextest run.
+    default: "[]"
+  working-directory:
+    description: Cargo workspace directory, relative to the checkout or absolute.
+    default: "."
+  junit-path:
+    description: JUnit glob relative to the Cargo workspace.
+    default: "target/nextest/**/junit.xml"
+  snapshots-path:
+    description: Pending insta snapshot directory relative to the checkout.
+    default: "pending-snapshots"
+  retention-days:
+    description: Number of days to retain test artifacts.
+    default: "14"
+runs:
+  using: composite
+  steps:
+    - name: Install cargo nextest
+      uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+      with:
+        tool: cargo-nextest
+    - name: Cargo test
+      id: run
+      # A separate immutable helper pin supports older self-hosted runner parsers.
+      uses: astral-sh/github-actions/nextest/run@e6fe1b51adba9d0b2c847e503fce90e8fb765188
+      with:
+        name: ${{ inputs.name }}
+        partition: ${{ inputs.partition }}
+        partitions: ${{ inputs.partitions }}
+        arguments: ${{ inputs.arguments }}
+        working-directory: ${{ inputs.working-directory }}
+        junit-path: ${{ inputs.junit-path }}
+        snapshots-path: ${{ inputs.snapshots-path }}
+    - name: Upload pending snapshots
+      if: ${{ failure() && steps.run.outputs.snapshots-name != '' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ steps.run.outputs.snapshots-name }}
+        path: ${{ steps.run.outputs.snapshots-path }}
+        if-no-files-found: ignore
+        include-hidden-files: true
+        retention-days: ${{ inputs.retention-days }}
+    - name: Upload JUnit results
+      if: ${{ always() && steps.run.outputs.junit-name != '' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ steps.run.outputs.junit-name }}
+        path: ${{ steps.run.outputs.junit-path }}
+        if-no-files-found: ignore
+        retention-days: ${{ inputs.retention-days }}
