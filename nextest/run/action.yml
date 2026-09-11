@@ -1,0 +1,36 @@
+name: Invoke nextest
+description: Validate shard inputs and invoke cargo nextest without a shell.
+inputs:
+  name:
+    required: true
+    description: Artifact-name component.
+  partition:
+    default: "1"
+    description: One-based partition number.
+  partitions:
+    default: "1"
+    description: Total number of partitions.
+  arguments:
+    default: "[]"
+    description: JSON array of nextest arguments.
+  working-directory:
+    default: "."
+    description: Cargo workspace directory.
+  junit-path:
+    default: "target/nextest/**/junit.xml"
+    description: JUnit glob relative to the Cargo workspace.
+  snapshots-path:
+    default: "pending-snapshots"
+    description: Pending snapshot directory relative to the checkout.
+outputs:
+  junit-name:
+    description: Unique JUnit artifact name.
+  junit-path:
+    description: Absolute JUnit artifact glob.
+  snapshots-name:
+    description: Unique pending-snapshot artifact name.
+  snapshots-path:
+    description: Absolute pending-snapshot directory.
+runs:
+  using: node24
+  main: index.mjs
