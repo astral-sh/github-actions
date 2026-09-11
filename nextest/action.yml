@@ -34,7 +34,8 @@ runs:
         tool: cargo-nextest
     - name: Cargo test
       id: run
-      uses: $/nextest/run
+      # A separate immutable helper pin supports older self-hosted runner parsers.
+      uses: astral-sh/github-actions/nextest/run@e6fe1b51adba9d0b2c847e503fce90e8fb765188
       with:
         name: ${{ inputs.name }}
         partition: ${{ inputs.partition }}

@@ -16,7 +16,8 @@ runs:
     - name: Install Rust
       shell: bash
       run: rustup toolchain install stable --profile minimal
-    - uses: $/nextest
+    # Exercise the action from this test checkout, including unmerged changes.
+    - uses: ./nextest # zizmor: ignore[self-repository]
       with:
         name: fixture-${{ runner.os }}-${{ inputs.partitions }}
         partition: ${{ inputs.partition }}

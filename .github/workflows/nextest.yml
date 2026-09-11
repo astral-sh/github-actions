@@ -34,7 +34,7 @@ jobs:
     outputs:
       partitions: ${{ steps.plan.outputs.partitions }}
     steps:
-      - uses: $/nextest/plan
+      - uses: astral-sh/github-actions/nextest/plan@e6fe1b51adba9d0b2c847e503fce90e8fb765188
         id: plan
         with:
           shards: ${{ inputs.shards }}
