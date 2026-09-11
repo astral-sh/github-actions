@@ -34,8 +34,9 @@ after preparing its environment:
 ```
 
 The action installs nextest, passes the JSON argument array directly to Cargo,
-and adds `--partition hash:N/T` when `T > 1`. One shard runs the unpartitioned
-suite. It sets `INSTA_UPDATE=new` and `INSTA_PENDING_DIR`, uploads pending
+and adds `--partition hash:N/T --no-tests=pass` when `T > 1`. Empty hash
+partitions succeed; one shard runs the unpartitioned suite with nextest's normal
+empty-suite behavior. It sets `INSTA_UPDATE=new` and `INSTA_PENDING_DIR`, uploads pending
 snapshots after a failure, and uploads JUnit results even when tests fail.
 Artifact names are `pending-snapshots-NAME[-N]` and `junit-results-NAME[-N]`;
 the numeric suffix is omitted for one shard. Each independent suite in a

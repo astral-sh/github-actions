@@ -49,6 +49,7 @@ test("multiple shards use one-based hash partitions and distinct artifacts", () 
     "run",
     "--partition",
     "hash:2/3",
+    "--no-tests=pass",
     "--workspace",
   ]);
   assert.equal(result.outputs["junit-name"], "junit-results-linux-2");
@@ -91,4 +92,19 @@ test("invalid partitions, names, and argument overrides are rejected", () => {
     { arguments: '["--partition=hash:1/2"]' },
   ])
     assert.throws(() => options({ ...input, ...change }, workspace));
+});
+
+test("empty-shard behavior cannot be overridden in a partitioned run", () => {
+  for (const args of [["--no-tests", "fail"], ["--no-tests=fail"]]) {
+    assert.throws(() =>
+      options(
+        { ...input, partitions: "2", arguments: JSON.stringify(args) },
+        workspace,
+      ),
+    );
+  }
+  assert.deepEqual(
+    options({ ...input, arguments: '["--no-tests=warn"]' }, workspace).args,
+    ["nextest", "run", "--no-tests=warn"],
+  );
 });

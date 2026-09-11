@@ -37,6 +37,12 @@ export function options(input, workspace) {
   ) {
     throw new Error("Use the partition inputs instead of passing --partition");
   }
+  if (
+    partitions > 1 &&
+    args.some((arg) => arg === "--no-tests" || arg.startsWith("--no-tests="))
+  ) {
+    throw new Error("Empty-shard behavior is managed by the action");
+  }
   const directory = path.resolve(workspace, input.directory);
   const suffix = partitions === 1 ? "" : `-${partition}`;
   return {
@@ -46,7 +52,11 @@ export function options(input, workspace) {
       "run",
       ...(partitions === 1
         ? []
-        : ["--partition", `hash:${partition}/${partitions}`]),
+        : [
+            "--partition",
+            `hash:${partition}/${partitions}`,
+            "--no-tests=pass",
+          ]),
       ...args,
     ],
     outputs: {
