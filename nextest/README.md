@@ -9,15 +9,17 @@ cache, feature, and test-fixture configuration.
 ```yaml
 jobs:
   test-windows:
+    name: cargo test on windows
     uses: astral-sh/github-actions/.github/workflows/nextest.yml@<commit>
     with:
-      name: cargo test on windows
       runs-on: windows-latest
       shards: 3
 ```
 
 The workflow accepts 1–256 shards and disables matrix fail-fast so a failing
 shard does not cancel the others. Its small planning job runs on `ubuntu-slim`.
+Set the caller job's `name` to identify the suite; the workflow names its jobs
+`plan shards` and `shard N of M`, including `shard 1 of 1` for unsharded runs.
 The caller should gate the workflow as usual and grant only `contents: read`.
 The checkout and repository-local action run with the caller's permissions.
 
