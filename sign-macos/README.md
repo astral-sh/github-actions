@@ -2,13 +2,12 @@
 
 Sign every executable in each target directory through Azure Key Vault, then
 submit all targets to Apple together and wait for notarization to be accepted.
-The action installs a pinned version of `uv`, authenticates with GitHub OIDC,
-and runs its PEP 723 scripts with their checked-in lockfiles.
+The action installs pinned versions of `uv` and Azure CLI, authenticates with
+GitHub OIDC, and runs its PEP 723 scripts with their checked-in lockfiles.
 
-Run on Linux x86_64 with Azure CLI installed, such as `ubuntu-24.04`. The caller's
-job needs `id-token: write` and an environment authorized to use the configured
-Azure identity. Release approval and artifact downloads/uploads belong to the
-caller.
+Run on Linux x86_64, such as `ubuntu-24.04`. The caller's job needs
+`id-token: write` and an environment authorized to use the configured Azure
+identity. Release approval and artifact downloads/uploads belong to the caller.
 
 ```yaml
 - uses: astral-sh/github-actions/sign-macos@<commit>

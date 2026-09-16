@@ -4,7 +4,7 @@ Extract executables from the declared wheels, check each GitHub archive's checks
 and inventory, and require its executable bytes to match the wheels. Preserve the
 original artifacts for assembly after signing.
 
-Install `uv` before calling the action. The output directory must not exist.
+The action installs `uv`. The output directory must not exist.
 
 ```yaml
 - uses: astral-sh/github-actions/prepare-release-signing@<commit>
