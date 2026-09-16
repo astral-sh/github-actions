@@ -4,7 +4,7 @@ Replace every wheel and GitHub archive executable with the signing output,
 regenerate wheel `RECORD` entries and archive checksums, and preserve other wheel
 contents and archive metadata. Original artifacts are left untouched.
 
-Install `uv` before calling the action. The output directory must not exist.
+The action installs `uv`. The output directory must not exist.
 
 ```yaml
 - uses: astral-sh/github-actions/assemble-signed-release@<commit>

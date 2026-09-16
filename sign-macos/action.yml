@@ -66,6 +66,16 @@ runs:
         version: "0.12.10"
         checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
         enable-cache: false
+        python-version: "3.13"
+        activate-environment: true
+        venv-path: ${{ runner.temp }}/astral-release-signing-azure-cli
+        no-project: true
+
+    - name: "Install Azure CLI"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: uv sync --locked --active --project "$ACTION_PATH/../azure-cli"
 
     - name: "Log in to Azure with GitHub OIDC"
       uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1

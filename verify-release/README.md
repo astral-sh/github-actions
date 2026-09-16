@@ -1,8 +1,8 @@
 # Verify signed release artifacts
 
-Verify one target's assembled wheels and GitHub archive on a native runner.
-Install `uv` before calling the action. Windows also requires PowerShell 7 and
-the Windows SDK's `signtool.exe`.
+Verify one target's assembled wheels and GitHub archive on a native runner. The
+action installs `uv`. Windows also requires PowerShell 7 and the Windows SDK's
+`signtool.exe`.
 
 ```yaml
 - uses: astral-sh/github-actions/verify-release@<commit>

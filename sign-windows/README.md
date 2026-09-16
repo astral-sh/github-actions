@@ -5,9 +5,10 @@ Authenticate with GitHub OIDC, copy all target directories, and sign their `.exe
 file to have a valid, timestamped Authenticode signature from the configured
 publisher.
 
-Run on Windows with Azure CLI installed, such as `windows-2025`. The caller's job
-needs `id-token: write` and an environment authorized to use the configured Azure
-identity. Release approval and artifact downloads/uploads belong to the caller.
+Run on Windows, such as `windows-2025`. The action installs pinned versions of
+`uv` and Azure CLI. The caller's job needs `id-token: write` and an environment
+authorized to use the configured Azure identity. Release approval and artifact
+downloads/uploads belong to the caller.
 
 ```yaml
 - uses: astral-sh/github-actions/sign-windows@<commit>

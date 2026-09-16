@@ -6,8 +6,8 @@ native executable and library from its assembled archive, preserving the paths
 used for signing. This action compares those bytes with the signing output and
 runs the same macOS or Windows trust checks as `verify-release`.
 
-Install `uv` first and use a native runner. Windows also requires PowerShell 7
-and the Windows SDK's `signtool.exe`.
+Use a native runner. The action installs `uv`. Windows also requires PowerShell
+7 and the Windows SDK's `signtool.exe`.
 
 ```yaml
 - uses: astral-sh/github-actions/verify-binaries@<commit>
