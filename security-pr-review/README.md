@@ -47,8 +47,10 @@ the prepared GitHub comment payloads.
 ## Publishing integration
 
 The publishing job obtains a `pull_requests: write` token from the caller's token
-service. That service must authorize the caller and this shared workflow's OIDC
-identity. The existing Astral policy supports same-repository reusable workflows;
-cross-repository publishing still needs integration. The caller can instead use
-the `comments` output in a separate publishing job once publishing is split out
-of this workflow.
+service. Astral's secure token service supports cross-repository reusable
+workflows; the target repository's policy must authorize the caller and the exact
+workflow identity, including the same commit SHA used by the caller:
+
+```text
+astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@<commit-sha>
+```
