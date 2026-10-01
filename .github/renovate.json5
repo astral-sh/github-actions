@@ -1,0 +1,47 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["github>astral-sh/renovate-config"],
+  packageRules: [
+    {
+      // Codex Action publishes two-component tags instead of full SemVer tags.
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["openai/codex-action"],
+      extractVersion: "^(?<version>v?\\d+\\.\\d+)$",
+      versioning: "regex:^v?(?<major>\\d+)\\.(?<minor>\\d+)$",
+    },
+    {
+      groupName: "Codex automation dependencies",
+      matchPackageNames: ["@openai/codex", "openai/codex-action"],
+      description: "Weekly update of Codex Action and Codex CLI dependencies",
+    },
+  ],
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      matchStrings: ['codex-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
+      depNameTemplate: "@openai/codex",
+      datasourceTemplate: "npm",
+      versioningTemplate: "semver",
+    },
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^security-pr-review/scripts/install-codex-security\\.sh$/"],
+      matchStrings: [
+        "releases/download/rust-v(?<currentValue>\\d+\\.\\d+\\.\\d+)/codex-x86_64-unknown-linux-musl\\.tar\\.gz[\\s\\S]*?(?<currentDigest>[a-f0-9]{64})",
+      ],
+      depNameTemplate: "@openai/codex",
+      datasourceTemplate: "custom.codex-release-assets",
+      versioningTemplate: "semver",
+    },
+  ],
+  customDatasources: {
+    "codex-release-assets": {
+      // Include release history so the inherited minimum release age can apply.
+      defaultRegistryUrlTemplate: "https://api.github.com/repos/openai/codex/releases?per_page=100",
+      transformTemplates: [
+        '{"releases": [$[draft = false and prerelease = false and $exists(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest)].{"version": $substringAfter(tag_name, "rust-v"), "digest": $substringAfter(assets[name = "codex-x86_64-unknown-linux-musl.tar.gz"].digest, "sha256:"), "releaseTimestamp": published_at, "isStable": true}]}',
+      ],
+    },
+  },
+}
