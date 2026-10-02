@@ -61,7 +61,7 @@ runs:
   using: "composite"
   steps:
     - name: "Install uv"
-      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         version: "0.12.10"
         checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
@@ -78,7 +78,7 @@ runs:
       run: uv sync --locked --active --project "$ACTION_PATH/../azure-cli"
 
     - name: "Log in to Azure with GitHub OIDC"
-      uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+      uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
       env:
         AZURE_CORE_OUTPUT: none
       with:
