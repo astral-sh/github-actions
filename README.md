@@ -4,6 +4,8 @@ Shared GitHub Actions for Astral projects.
 
 - [Release smoke test](release-smoke-test/): test release artifacts in disposable containers.
 - [PR security review](security-pr-review/): review pull requests with Codex Security.
+- [Plan release signing](plan-release-signing/README.md): derive native
+  verification matrices and artifact declarations from cargo-dist targets.
 - [Prepare release signing inputs](prepare-release-signing/README.md): extract
   executables and check that wheels and GitHub archives agree.
 - [macOS signing](sign-macos/README.md): Azure authentication, signing, and notarization.
@@ -16,6 +18,6 @@ Shared GitHub Actions for Astral projects.
 - [Verify packaged binaries](verify-binaries/README.md): use the same native
   checks with a project's own archive adapter.
 
-The caller supplies [artifact declarations](release-artifacts/README.md), release
-approval, runner selection, artifact transfers, and project-specific smoke tests.
-Use the same pinned commit for all actions in a release.
+The caller supplies package executable inventories, release approval, artifact
+transfers, and project-specific smoke tests. Use the same pinned commit for all
+actions in a release.

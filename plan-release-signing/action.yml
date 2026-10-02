@@ -1,0 +1,57 @@
+name: "Plan release signing"
+description: "Build native signing matrices and artifact declarations from a cargo-dist target inventory."
+
+inputs:
+  packages:
+    description: "JSON object mapping macOS and Windows wheel packages to their executable inventories."
+    required: true
+  archive-package:
+    description: "Wheel package whose executables are included in the GitHub release archive."
+    required: true
+  workspace:
+    description: "Path to the cargo-dist workspace configuration."
+    required: false
+    default: "dist-workspace.toml"
+  wheels-directory:
+    description: "Directory containing one wheel directory per release target."
+    required: false
+    default: "wheels"
+  github-archives-directory:
+    description: "Directory containing cargo-dist GitHub release archives."
+    required: false
+    default: "github-archives"
+
+outputs:
+  targets:
+    description: "JSON array of every cargo-dist release target."
+    value: ${{ steps.plan.outputs.targets }}
+  artifacts:
+    description: "JSON array of every native signing artifact declaration."
+    value: ${{ steps.plan.outputs.artifacts }}
+  macos:
+    description: "JSON matrix of macOS signing targets and native verification runners."
+    value: ${{ steps.plan.outputs.macos }}
+  windows:
+    description: "JSON matrix of Windows signing targets and native verification runners."
+    value: ${{ steps.plan.outputs.windows }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Install uv"
+      uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      with:
+        version: "0.12.10"
+        enable-cache: false
+
+    - name: "Plan signed release targets"
+      id: plan
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RELEASE_PACKAGES: ${{ inputs.packages }}
+        RELEASE_ARCHIVE_PACKAGE: ${{ inputs.archive-package }}
+        RELEASE_WORKSPACE: ${{ inputs.workspace }}
+        RELEASE_WHEELS_DIRECTORY: ${{ inputs.wheels-directory }}
+        RELEASE_GITHUB_ARCHIVES_DIRECTORY: ${{ inputs.github-archives-directory }}
+      run: uv run --locked "$ACTION_PATH/plan.py" >> "$GITHUB_OUTPUT"

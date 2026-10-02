@@ -1,9 +1,9 @@
 # Release artifact declarations
 
-The preparation, assembly, and verification actions share a target declaration.
-The caller defines its wheel packages, executable names, and GitHub archive
-layout once and passes the same declarations to each phase. Paths are relative to
-the workspace unless absolute.
+The planning action generates target declarations from cargo-dist targets and a
+caller's wheel package and executable inventories. The preparation, assembly,
+and verification actions pass the same declarations through each phase. Paths
+are relative to the workspace unless absolute.
 
 For example, a macOS target with one wheel package:
 
@@ -36,7 +36,7 @@ Use `system: windows` for Windows targets. Declare `.exe` names and the ZIP's
 member paths, which may differ from the macOS TAR layout.
 
 These scripts handle trusted, in-memory Astral release artifacts. They do not
-build artifacts or discover which executables a project ought to ship. The caller
-must declare every release target that needs signing; undeclared targets are not
-processed. Preparation and assembly take an array of declarations, while native
-verification takes one target at a time.
+build artifacts or discover which executables a project ought to ship. The
+caller declares those executable inventories, and the planner requires every
+native cargo-dist target to be covered. Preparation and assembly take an array
+of declarations, while native verification takes one target at a time.
