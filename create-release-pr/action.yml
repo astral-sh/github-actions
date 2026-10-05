@@ -1,0 +1,91 @@
+name: "Create release pull request"
+description: "Commit prepared release files and create or update a pull request."
+
+inputs:
+  version:
+    description: "Release version used in the branch and commit message."
+    required: true
+  tag-prefix:
+    description: "Prefix added to the version when checking for an existing release tag."
+    default: ""
+  token:
+    description: "Token with contents: write and pull-requests: write permissions."
+    default: ${{ github.token }}
+
+outputs:
+  pull-request-url:
+    description: "URL of the created or updated release pull request."
+    value: ${{ steps.pull-request.outputs.url }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Validate release refs"
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        VERSION: ${{ inputs.version }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+      run: |
+        if [[ -z "$VERSION" ]] ||
+           ! git check-ref-format "refs/tags/${TAG_PREFIX}${VERSION}" ||
+           ! git check-ref-format "refs/heads/release/${VERSION}"; then
+          echo "::error::Invalid release version or tag prefix"
+          exit 1
+        fi
+        if git rev-parse --verify --quiet "refs/tags/${TAG_PREFIX}${VERSION}" >/dev/null; then
+          echo "::error::Tag ${TAG_PREFIX}${VERSION} already exists"
+          exit 1
+        fi
+
+    - name: "Commit release files"
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        git add --update
+        if git diff --cached --quiet; then
+          echo "::error::Release preparation did not change any tracked files"
+          exit 1
+        fi
+        git diff --cached --check
+        git switch -c "release/${VERSION}"
+        git -c user.name="github-actions[bot]" \
+          -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+          commit -m "Release ${VERSION}"
+
+    - name: "Create or update pull request"
+      id: pull-request
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        GH_TOKEN: ${{ inputs.token }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        branch="release/${VERSION}"
+        git push --force \
+          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+          "HEAD:refs/heads/${branch}"
+
+        pull_request="$(
+          gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$DEFAULT_BRANCH" \
+            --head "$branch" \
+            --state open \
+            --json url \
+            --jq '.[0].url'
+        )"
+        if [[ -z "$pull_request" ]]; then
+          pull_request="$(
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$DEFAULT_BRANCH" \
+              --head "$branch" \
+              --fill-first
+          )"
+        fi
+        printf '%s\n' "$pull_request"
+        printf 'url=%s\n' "$pull_request" >> "$GITHUB_OUTPUT"
