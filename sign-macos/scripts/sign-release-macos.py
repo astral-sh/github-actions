@@ -124,12 +124,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
     if bool(entitlements) != bool(entitled_binaries):
         raise ValueError("Provide both an entitlements file and its executable paths")
 
-    code_page_options = (
-        ["--arm64-16k-code-pages"]
-        if os.environ.get("ARM64_16K_CODE_PAGES") == "true"
-        else []
-    )
-
     with tempfile.TemporaryDirectory() as temporary:
         components = Path(temporary)
         certificate = components / "certificate.pem"
@@ -195,7 +189,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             os.environ["KEY_NAME"],
                             "--code-signature-flags",
                             "runtime",
-                            *code_page_options,
+                            "--arm64-16k-code-pages",
                             *options,
                             source,
                             output,

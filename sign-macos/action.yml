@@ -8,9 +8,6 @@ inputs:
   signed-directory:
     description: "New output directory for signed targets and their certificates. Must not exist."
     required: true
-  arm64-16k-code-pages:
-    description: "Use 16 KiB code-signature pages for ARM64 Mach-O binaries. Requires rcodesign support."
-    default: "false"
   entitlements-file:
     description: "Optional plist containing entitlements for the named executable paths."
     default: ""
@@ -95,7 +92,6 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
-        ARM64_16K_CODE_PAGES: ${{ inputs.arm64-16k-code-pages }}
         ENTITLEMENTS_FILE: ${{ inputs.entitlements-file }}
         ENTITLEMENTS_BINARIES: ${{ inputs.entitlements-binaries }}
         STORAGE_ACCOUNT: ${{ inputs.storage-account }}
