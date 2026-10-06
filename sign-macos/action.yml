@@ -8,6 +8,9 @@ inputs:
   signed-directory:
     description: "New output directory for signed targets and their certificates. Must not exist."
     required: true
+  arm64-16k-code-pages:
+    description: "Use 16 KiB code-signature pages for ARM64 Mach-O binaries. Requires rcodesign support."
+    default: "false"
   entitlements-file:
     description: "Optional plist containing entitlements for the named executable paths."
     default: ""
@@ -31,10 +34,10 @@ inputs:
     required: true
   component-rcodesign-blob:
     description: "Blob containing the Linux x86_64 rcodesign executable."
-    required: true
+    default: "linux/amd64/rcodesign-e4829d3c3c38cd388566d3ba9dec4735def5bc3a1f3e8dbf29b586771cd7c6d3"
   component-rcodesign-sha256:
     description: "SHA-256 digest of the rcodesign executable."
-    required: true
+    default: "e4829d3c3c38cd388566d3ba9dec4735def5bc3a1f3e8dbf29b586771cd7c6d3"
   component-pkcs11-blob:
     description: "Blob containing the Linux x86_64 Azure Key Vault PKCS#11 library."
     required: true
@@ -92,6 +95,7 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        ARM64_16K_CODE_PAGES: ${{ inputs.arm64-16k-code-pages }}
         ENTITLEMENTS_FILE: ${{ inputs.entitlements-file }}
         ENTITLEMENTS_BINARIES: ${{ inputs.entitlements-binaries }}
         STORAGE_ACCOUNT: ${{ inputs.storage-account }}
