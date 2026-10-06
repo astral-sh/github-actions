@@ -189,6 +189,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             os.environ["KEY_NAME"],
                             "--code-signature-flags",
                             "runtime",
+                            "--arm64-16k-code-pages",
                             *options,
                             source,
                             output,

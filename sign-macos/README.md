@@ -19,8 +19,6 @@ identity. Release approval and artifact downloads/uploads belong to the caller.
     azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
     storage-account: ${{ secrets.CODESIGN_STORAGE_ACCOUNT }}
     storage-container: ${{ secrets.CODESIGN_STORAGE_CONTAINER }}
-    component-rcodesign-blob: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_BLOB }}
-    component-rcodesign-sha256: ${{ secrets.CODESIGN_COMPONENT_RCODESIGN_SHA256 }}
     component-pkcs11-blob: ${{ secrets.CODESIGN_COMPONENT_PKCS11_BLOB }}
     component-pkcs11-sha256: ${{ secrets.CODESIGN_COMPONENT_PKCS11_SHA256 }}
     azure-keyvault-name: ${{ secrets.CODESIGN_AZURE_KEYVAULT_NAME }}
@@ -41,6 +39,14 @@ The action downloads `rcodesign`, the Azure Key Vault PKCS#11 library, and the
 signing certificate once for all targets. It verifies the component SHA-256
 digests and certificate fingerprint before signing with the hardened runtime.
 Private signing keys remain in Azure Key Vault.
+
+The action uses 16 KiB code-signature pages for ARM64 Mach-O binaries, reducing
+the number of code slots macOS hashes during signature verification. Other
+architectures use 4 KiB pages. The default `rcodesign` blob and SHA-256 digest pin
+a build that supports the required `--arm64-16k-code-pages` flag. To use a different
+signer, override both `component-rcodesign-blob` and `component-rcodesign-sha256`
+with a build that supports the flag. The configured storage account and container
+must contain the pinned blob.
 
 Projects that host third-party code, such as Python, can pass an
 `entitlements-file` plist and an `entitlements-binaries` JSON array. The array

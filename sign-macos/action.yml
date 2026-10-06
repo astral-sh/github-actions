@@ -31,10 +31,10 @@ inputs:
     required: true
   component-rcodesign-blob:
     description: "Blob containing the Linux x86_64 rcodesign executable."
-    required: true
+    default: "linux/amd64/rcodesign-e4829d3c3c38cd388566d3ba9dec4735def5bc3a1f3e8dbf29b586771cd7c6d3"
   component-rcodesign-sha256:
     description: "SHA-256 digest of the rcodesign executable."
-    required: true
+    default: "e4829d3c3c38cd388566d3ba9dec4735def5bc3a1f3e8dbf29b586771cd7c6d3"
   component-pkcs11-blob:
     description: "Blob containing the Linux x86_64 Azure Key Vault PKCS#11 library."
     required: true
