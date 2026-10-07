@@ -39,6 +39,6 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: python3 scripts/release.py prepare "$VERSION"
 
-      - uses: ./create-release-pr
+      - uses: $/create-release-pr
         with:
           version: ${{ inputs.version }}
