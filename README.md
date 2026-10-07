@@ -26,7 +26,7 @@ actions in a release.
 
 ## Releases
 
-This repository uses CalVer tags: `YYYY.MM.DD` for the first release on a date,
+This repository uses CalVer tags: `YYYY.MM.DD.0` for the first release on a date,
 then `YYYY.MM.DD.1`, `YYYY.MM.DD.2`, etc. There is no `v` prefix. Use the
 same tag's full commit SHA for every action in a caller's release workflow.
 
