@@ -11,6 +11,15 @@ caller's repository to review the pull request.
 The prompt, schema, plugin setup, and path coverage checks live here. Formatting
 and publishing findings use the shared [pull request review helpers](../pull-request-review/).
 
+The [composite action](action.yml) runs only the security review and returns its
+structured `result`. Use it when a caller combines security findings with other
+reviews before publishing. The caller owns the job's runner, environment, timeout,
+and read-only GitHub permissions. Pass `openai-api-key`, `github-token`,
+`pull-request-number`, `base-sha`, `head-sha`, `uv-version`, and `uv-checksum`.
+The action also accepts the `threat-models` and `setup-command` inputs described
+below. It checks out the caller repository and saves its configuration before
+switching to the requested pull request head.
+
 ## Usage
 
 Pin the workflow to a full commit SHA. Restrict the caller to same-repository

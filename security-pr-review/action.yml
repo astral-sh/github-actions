@@ -1,0 +1,145 @@
+name: Security pull request review
+description: Review a pull request with Codex Security and return structured findings.
+
+inputs:
+  openai-api-key:
+    description: OpenAI API key for the review
+    required: true
+  github-token:
+    description: Read-only GitHub token for pull request context
+    required: true
+  pull-request-number:
+    description: Pull request number
+    required: true
+  base-sha:
+    description: Pull request base commit
+    required: true
+  head-sha:
+    description: Pull request head commit
+    required: true
+  threat-models:
+    description: Threat model directory in the caller repository
+    default: agents/references
+  setup-command:
+    description: Bash commands to run before checking out the pull request head
+    default: ""
+  uv-version:
+    description: uv version used for repository setup
+    required: true
+  uv-checksum:
+    description: SHA-256 of the Linux x86-64 uv release archive
+    required: true
+
+outputs:
+  result:
+    description: Structured security review findings
+    value: ${{ steps.review.outputs.final-message }}
+
+runs:
+  using: composite
+  steps:
+    - name: Save review implementation
+      shell: bash
+      run: cp -R "$ACTION_PATH" "$RUNNER_TEMP/pull-request-review-source"
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+
+    - name: Checkout caller repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        token: ${{ inputs.github-token }}
+        fetch-depth: 0
+        persist-credentials: false
+
+    - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        version: ${{ inputs.uv-version }}
+        checksum: ${{ inputs.uv-checksum }}
+
+    - name: Set up caller repository
+      if: inputs.setup-command != ''
+      env:
+        SETUP_COMMAND: ${{ inputs.setup-command }}
+      shell: bash
+      run: bash -euo pipefail -c "$SETUP_COMMAND"
+
+    - name: Prepare review configuration
+      env:
+        HEAD_SHA: ${{ inputs.head-sha }}
+        THREAT_MODELS: ${{ inputs.threat-models }}
+      shell: bash
+      run: bash "$RUNNER_TEMP/pull-request-review-source/scripts/setup.sh"
+
+    - name: "Checkout Codex Security plugin"
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: openai/plugins
+        ref: 1e285826e604f66f7208f7ac4dba0fe8341d1f57
+        path: .codex-security-plugin
+        token: ${{ inputs.github-token }}
+        sparse-checkout: |
+          .agents/plugins
+          plugins/codex-security
+        persist-credentials: false
+
+    - name: "Install Codex Security plugin"
+      shell: bash
+      run: '"$REVIEW_CONFIG/scripts/install-codex-security.sh" "$REVIEW_CONFIG/codex"'
+
+    - name: "Collect pull request context"
+      shell: bash
+      run: bash "$REVIEW_CONFIG/scripts/collect-context.sh"
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+
+    # codex-action configures these only on GitHub-hosted runners.
+    - name: "Enable Linux user namespaces for bubblewrap"
+      shell: bash
+      run: |
+        current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
+        if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+        fi
+
+        current_apparmor="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)"
+        if [ -n "$current_apparmor" ] && [ "$current_apparmor" != "0" ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+
+    - name: "Review pull request"
+      id: review
+      uses: openai/codex-action@c385816875cc2fc8e033ed9d1cba96f8c331210e # v1.11 + GitHub API retry
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TMPDIR: ${{ runner.temp }}/codex-security
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        codex-version: "0.153.4"
+        codex-home: "${{ env.REVIEW_CONFIG }}/codex"
+        model: gpt-6-astra
+        effort: xhigh
+        permission-profile: "pull-request-review"
+        safety-strategy: drop-sudo
+        allow-bot-users: "astral-automations-bot[bot],renovate[bot]"
+        prompt-file: "${{ runner.temp }}/pull-request-security-review-prompt.md"
+        output-schema-file: "${{ env.REVIEW_CONFIG }}/schema.json"
+        output-file: "${{ runner.temp }}/pull-request-review-result.json"
+
+    - name: "Check review coverage"
+      if: steps.review.outcome == 'success'
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      shell: bash
+      run: bash "$REVIEW_CONFIG/scripts/check-coverage.sh"
+
+    - name: "Upload Codex thread"
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: codex-thread-pull-request-security-review-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ env.REVIEW_CONFIG }}/codex/sessions
+        if-no-files-found: warn
