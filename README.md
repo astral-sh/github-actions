@@ -39,8 +39,3 @@ To release:
 3. Run **Release** on the default branch with the same version. It checks
    `pyproject.toml` and refuses an existing tag, then tags the workflow's exact
    commit and creates a GitHub release with generated notes.
-
-The pyproject is not a Python package. Its initial `0.0.0` version cannot be
-released. uv stores normalized versions (e.g., `2026.10.7`); branches and tags
-use the original CalVer (`2026.10.07`). The workflows only run on the default
-branch of this repository.
