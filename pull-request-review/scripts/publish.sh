@@ -24,12 +24,8 @@ if [ "$current_head_sha" != "$HEAD_SHA" ]; then
   exit 0
 fi
 
-jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
-while IFS= read -r comment; do
-  printf '%s\n' "$comment" |
-    gh api \
-      --method POST \
-      "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
-      --input - \
-      --silent
-done
+gh api \
+  --method POST \
+  "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
+  --input "$RUNNER_TEMP/review.json" \
+  --silent
