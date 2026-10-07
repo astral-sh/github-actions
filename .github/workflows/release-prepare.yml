@@ -37,7 +37,7 @@ jobs:
       - name: Prepare release version
         env:
           VERSION: ${{ inputs.version }}
-        run: python3 scripts/release.py prepare "$VERSION"
+        run: uv run --locked scripts/release.py prepare "$VERSION"
 
       - uses: $/create-release-pr
         with:

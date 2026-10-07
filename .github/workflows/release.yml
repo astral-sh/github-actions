@@ -27,10 +27,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          # renovate: datasource=github-release-attachments depName=astral-sh/uv
+          version: "0.12.23"
+          checksum: "9167d72b3319674b6303c4cbe071854bba13ebdf3d76b1a7cbdc175471fb66d6"
+          enable-cache: false
+
       - name: Validate prepared version
         env:
           VERSION: ${{ inputs.version }}
-        run: python3 scripts/release.py validate "$VERSION"
+        run: uv run --locked scripts/release.py validate "$VERSION"
 
   publish:
     needs: validate
