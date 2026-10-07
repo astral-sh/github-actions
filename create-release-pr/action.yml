@@ -27,8 +27,7 @@ runs:
         VERSION: ${{ inputs.version }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
       run: |
-        if [[ -z "$VERSION" ]] ||
-           ! git check-ref-format "refs/tags/${TAG_PREFIX}${VERSION}" ||
+        if ! git check-ref-format "refs/tags/${TAG_PREFIX}${VERSION}" ||
            ! git check-ref-format "refs/heads/release/${VERSION}"; then
           echo "::error::Invalid release version or tag prefix"
           exit 1
@@ -75,8 +74,8 @@ runs:
             --base "$DEFAULT_BRANCH" \
             --head "$branch" \
             --state open \
-            --json url \
-            --jq '.[0].url'
+            --json url,isCrossRepository \
+            --jq 'map(select(.isCrossRepository == false))[0].url // empty'
         )"
         if [[ -z "$pull_request" ]]; then
           pull_request="$(

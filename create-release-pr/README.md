@@ -1,32 +1,21 @@
 # Create release pull request
 
-Commit prepared release files on `release/<version>` and create or update a pull
-request targeting the repository's default branch. The caller owns checkout,
-tool installation, version selection, and preparation and validation of release
-files. This composite action handles the release branch, commit, and pull request.
+Commit prepared changes on `release/<version>` and open a pull request against
+the default branch. A rerun from a fresh checkout force-updates the branch and
+reuses its same-repository pull request, preserving the title and description.
 
-## Usage
+The caller needs Bash, Git, and the GitHub CLI. Check out the repository at the
+workspace root with full history and tags, install the project's tools, and
+prepare and validate the release files. Leave the changes uncommitted. Pin the
+action to a full commit SHA.
 
-Use a runner with Bash, Git, and the GitHub CLI. Check out the caller repository
-at the workspace root with full history and tags, and leave prepared changes
-uncommitted. Pin the action to a full commit SHA.
+This example assumes a `workflow_dispatch` workflow with a required string input
+named `version`. Replace `example/project` and the preparation script with the
+caller's repository and release command.
 
 ```yaml
-name: Prepare release
-
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Version to release
-        required: true
-        type: string
-
-permissions: {}
-
 jobs:
   prepare:
-    # Replace the repository name with the intended release repository.
     if: github.repository == 'example/project' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -42,13 +31,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Add the project's tool setup steps here.
-
       - name: Prepare release files
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
-        # Replace with the project's preparation and validation commands.
         run: ./scripts/prepare-release.sh "$VERSION"
 
       - uses: astral-sh/github-actions/create-release-pr@<commit-sha>
@@ -57,40 +43,26 @@ jobs:
           version: ${{ inputs.version }}
 ```
 
-The caller controls the trigger, repository and branch restrictions, runner,
-permissions, and concurrency. Preparation steps can use ordinary action `uses`,
-`run`, `env`, and step outputs. For example, a caller can derive the release
-version during preparation and pass that step's output as `version`.
-
-## Inputs
-
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `version` | Yes | | Version used in `release/<version>` and the `Release <version>` commit message. |
+| `version` | Yes | | Version for the branch and `Release <version>` commit message. Can be an output of a preparation step. |
 | `tag-prefix` | No | Empty | Prefix for the existing-tag check, such as `v`. |
 | `token` | No | `github.token` | Token used to push the branch and create the pull request. |
 
-The action checks that the version and tag prefix form valid Git refs and rejects
-an existing local release tag. Project-specific version syntax and metadata
-validation belong in the caller's preparation steps.
-
-The action stages all modifications and deletions to tracked files and includes
-any already-staged changes. Untracked files are not added. It fails if there are
-no changes to commit. It commits as
-`github-actions[bot]` without changing the repository's Git identity configuration.
-Re-running from a fresh checkout force-updates the release branch and reuses its
-open pull request. Existing pull request titles and descriptions are preserved.
+The action rejects invalid Git refs, an existing local release tag, or no changes
+to commit. It stages tracked modifications and deletions, includes already-staged
+changes, and leaves untracked files out. It runs `git diff --cached --check`
+before committing as `github-actions[bot]`. The repository's Git identity
+configuration is not changed.
 
 The `pull-request-url` output contains the created or existing pull request URL.
 
-## Authentication
+The default token needs `contents: write`, `pull-requests: write`, and the
+repository setting that allows GitHub Actions to create pull requests. To use a
+token obtained by an earlier step, pass it as `token` with the same repository
+permissions.
 
-The token needs `contents: write` and `pull-requests: write` on the caller
-repository. The default token also requires the repository setting that allows
-GitHub Actions to create pull requests. Pass `token` to use credentials obtained
-by an earlier step, such as a GitHub App installation token.
-
-Pushes with the default `GITHUB_TOKEN` do not trigger push workflows. Pull request
-workflows created by its `opened`, `synchronize`, or `reopened` events require
-approval from a user with write access. See
+The default token does not trigger push workflows. Pull request workflows from
+its `opened`, `synchronize`, or `reopened` events require approval from a user
+with write access. See
 [GitHub's workflow triggering rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
