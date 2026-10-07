@@ -23,3 +23,24 @@ Shared GitHub Actions for Astral projects.
 The caller supplies package executable inventories, release approval, artifact
 transfers, and project-specific smoke tests. Use the same pinned commit for all
 actions in a release.
+
+## Releases
+
+This repository uses CalVer tags: `YYYY.MM.DD` for the first release on a date,
+then `YYYY.MM.DD.1`, `YYYY.MM.DD.2`, etc. There is no `v` prefix. Use the
+same tag's full commit SHA for every action in a caller's release workflow.
+
+To release:
+
+1. Run **Prepare release** on the default branch with the desired version. It
+   validates the date, uses uv to update `pyproject.toml`, and uses
+   `create-release-pr` to open or update `release/<version>`.
+2. Review and merge that PR.
+3. Run **Release** on the default branch with the same version. It checks
+   `pyproject.toml` and refuses an existing tag, then tags the workflow's exact
+   commit and creates a GitHub release with generated notes.
+
+The pyproject is not a Python package. Its initial `0.0.0` version cannot be
+released. uv stores normalized versions (e.g., `2026.10.7`); branches and tags
+use the original CalVer (`2026.10.07`). The workflows only run on the default
+branch of this repository.
