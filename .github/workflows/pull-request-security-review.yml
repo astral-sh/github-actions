@@ -169,7 +169,7 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          sparse-checkout: security-pr-review
+          sparse-checkout: pull-request-review
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -179,7 +179,7 @@ jobs:
 
       - name: "Prepare review findings"
         id: comments
-        run: bash security-pr-review/scripts/prepare.sh
+        run: bash pull-request-review/scripts/prepare.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_RESULT: ${{ needs.review.outputs.result }}
@@ -191,8 +191,17 @@ jobs:
     environment: automations
     timeout-minutes: 5
     permissions:
+      contents: read
       id-token: write # for the credential broker
     steps:
+      - name: Checkout review helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: pull-request-review
+          persist-credentials: false
+
       - name: "Get repository token"
         id: token
         uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
@@ -204,36 +213,7 @@ jobs:
             pull_requests: write
 
       - name: "Publish review findings"
-        run: |
-          set -euo pipefail
-
-          printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
-
-          if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
-            echo "No actionable findings to publish."
-            exit 0
-          fi
-
-          current_head_sha="$(
-            gh pr view "$PULL_REQUEST_NUMBER" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json headRefOid \
-              --jq '.headRefOid'
-          )"
-          if [ "$current_head_sha" != "$HEAD_SHA" ]; then
-            echo "The pull request head changed; skipping stale review findings."
-            exit 0
-          fi
-
-          jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
-          while IFS= read -r comment; do
-            printf '%s\n' "$comment" |
-              gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
-                --input - \
-                --silent
-          done
+        run: bash pull-request-review/scripts/publish.sh
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
