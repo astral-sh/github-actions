@@ -1,0 +1,124 @@
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Linux x86-64 runner for Cargo Vet"
+        type: string
+        default: ubuntu-latest
+      # Run the job with a success instead of a skip so dependent jobs can run.
+      workspaces:
+        description: "JSON array of Cargo workspace directories to vet"
+        type: string
+        default: '["."]'
+      uv-version:
+        description: "uv version used to install Cargo Vet"
+        type: string
+        required: true
+      uv-checksum:
+        description: "SHA-256 of the Linux x86-64 uv release archive"
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  vet:
+    name: "Cargo Vet (${{ matrix.workspace }})"
+    timeout-minutes: 10
+    runs-on: ${{ inputs.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJSON(fromJSON(inputs.workspaces)[0] != null && inputs.workspaces || '["."]') }}
+    environment: ${{ fromJSON(inputs.workspaces)[0] != null && 'automations' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: "Skip Cargo Vet"
+        if: ${{ fromJSON(inputs.workspaces)[0] == null }}
+        run: echo "Cargo Vet is not required"
+      - name: "Checkout Cargo Vet configuration"
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          sparse-checkout: cargo-vet
+          persist-credentials: false
+      - name: "Save Cargo Vet configuration"
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        run: cp -R cargo-vet "$RUNNER_TEMP/cargo-vet-tool"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ inputs.uv-version }}
+          checksum: ${{ inputs.uv-checksum }}
+      - name: "Get dependency audit token"
+        id: token
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        with:
+          exchange-url: ${{ secrets.STS_API_URL }}/exchange
+          audience: ${{ secrets.STS_API_URL }}
+          repository: astral-sh/dependency-reviews
+          permissions: |
+            actions: read
+      - name: "Find latest dependency audits and baseline"
+        id: audits
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          run_id=$(gh run list \
+            --repo astral-sh/dependency-reviews \
+            --workflow export.yml \
+            --branch reviews \
+            --status success \
+            --limit 1 \
+            --json databaseId,event \
+            --jq '.[0] | select(.event == "push" or .event == "workflow_dispatch") | .databaseId')
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful dependency audit export found."
+            exit 1
+          fi
+          echo "Using dependency-reviews run $run_id."
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: "Download dependency audits and baseline"
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ steps.token.outputs.token }}
+          repository: astral-sh/dependency-reviews
+          run-id: ${{ steps.audits.outputs.run-id }}
+          name: cargo-vet-audits
+          path: ${{ runner.temp }}/cargo-vet
+      - name: "Vet dependencies"
+        if: ${{ fromJSON(inputs.workspaces)[0] != null }}
+        working-directory: ${{ matrix.workspace }}
+        env:
+          FIRST_PARTY_WORKSPACES: ${{ inputs.workspaces }}
+        run: |
+          test -f "$RUNNER_TEMP/cargo-vet/config.toml"
+          touch "$RUNNER_TEMP/cargo-vet/imports.lock"
+          jq -r 'unique[]' <<< "$FIRST_PARTY_WORKSPACES" |
+            while IFS= read -r workspace; do
+              (cd "$GITHUB_WORKSPACE/$workspace" && cargo metadata --no-deps --format-version 1)
+            done |
+            jq -s '[.[].packages[].manifest_path] | unique' > "$RUNNER_TEMP/cargo-vet-workspaces.json"
+          cargo metadata --all-features --locked --format-version 1 |
+            jq -r --slurpfile workspaces "$RUNNER_TEMP/cargo-vet-workspaces.json" '
+              .packages[] |
+              select(.source == null and (.manifest_path as $manifest | $workspaces[0] | index($manifest))) |
+              .name |
+              "\n[policy.\(.)]",
+              "audit-as-crates-io = false",
+              "criteria = \"safe-to-deploy\"",
+              "dev-criteria = \"safe-to-deploy\""
+            ' >> "$RUNNER_TEMP/cargo-vet/config.toml"
+          uv run --locked --project "$RUNNER_TEMP/cargo-vet-tool" cargo vet --store-path "$RUNNER_TEMP/cargo-vet"
