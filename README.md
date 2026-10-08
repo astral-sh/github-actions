@@ -23,3 +23,20 @@ Shared GitHub Actions for Astral projects.
 The caller supplies package executable inventories, release approval, artifact
 transfers, and project-specific smoke tests. Use the same pinned commit for all
 actions in a release.
+
+## Releases
+
+This repository uses CalVer tags: `YYYY.MM.DD.0` for the first release on a date,
+then `YYYY.MM.DD.1`, `YYYY.MM.DD.2`, etc. There is no `v` prefix. Use the
+same tag's full commit SHA for every action in a caller's release workflow.
+
+To release:
+
+1. Run **Prepare release** on the default branch. Leave `version` blank to use
+   today's UTC date and the next available generation, or enter `YYYY.MM.DD.N`.
+   It opens or updates `release/<version>` using `create-release-pr`.
+2. Review and merge that PR.
+3. Run **Release** on the default branch. Leave `version` blank to release
+   the prepared version, or enter it explicitly as a check. The workflow
+   refuses an existing tag, tags its exact commit, and creates a GitHub release
+   with generated notes.
