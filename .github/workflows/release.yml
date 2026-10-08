@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Prepared release version: YYYY.MM.DD.N (start at 0 each day)"
-        required: true
+        description: "Optional YYYY.MM.DD.N; defaults to the version from the merged preparation PR"
+        required: false
         type: string
 
 concurrency:
@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,9 +37,10 @@ jobs:
           enable-cache: false
 
       - name: Validate prepared version
+        id: version
         env:
           VERSION: ${{ inputs.version }}
-        run: uv run --locked scripts/release.py validate "$VERSION"
+        run: uv run --locked scripts/release.py validate "$VERSION" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: validate
@@ -50,7 +53,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_COMMIT: ${{ github.sha }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
           gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
             --raw-field "ref=refs/tags/${VERSION}" \

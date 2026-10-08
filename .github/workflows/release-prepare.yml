@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version: YYYY.MM.DD.N (start at 0 each day)"
-        required: true
+        description: "Optional YYYY.MM.DD.N; defaults to today's UTC date and next available generation"
+        required: false
         type: string
 
 permissions: {}
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      group: release-prepare-${{ inputs.version }}
+      group: release-prepare
       cancel-in-progress: false
     permissions:
       contents: write
@@ -35,10 +35,11 @@ jobs:
           enable-cache: false
 
       - name: Prepare release version
+        id: version
         env:
           VERSION: ${{ inputs.version }}
-        run: uv run --locked scripts/release.py prepare "$VERSION"
+        run: uv run --locked scripts/release.py prepare "$VERSION" >> "$GITHUB_OUTPUT"
 
       - uses: $/create-release-pr
         with:
-          version: ${{ inputs.version }}
+          version: ${{ steps.version.outputs.version }}
