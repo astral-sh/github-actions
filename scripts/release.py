@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = []
+# dependencies = ["packaging"]
 #
 # [tool.uv]
 # no-build = true
@@ -14,6 +14,8 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 
 CALVER = re.compile(r"([0-9]{4})\.([0-9]{2})\.([0-9]{2})\.(0|[1-9][0-9]*)")
@@ -44,12 +46,15 @@ def main() -> None:
 
     if args.action == "validate":
         with Path("pyproject.toml").open("rb") as file:
-            prepared = tomllib.load(file)["project"]["version"]
+            prepared_text = tomllib.load(file)["project"]["version"]
+        try:
+            prepared = Version(prepared_text)
+        except InvalidVersion as error:
+            parser.error(f"invalid version in pyproject.toml: {error}")
+        if len(prepared.release) != 4:
+            parser.error(f"no prepared CalVer release in pyproject.toml (version is {prepared_text!r})")
         if not args.version:
-            parts = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)", prepared)
-            if parts is None:
-                parser.error(f"no prepared CalVer release in pyproject.toml (version is {prepared!r})")
-            year, month, day, generation = map(int, parts.groups())
+            year, month, day, generation = prepared.release
             args.version = f"{year:04}.{month:02}.{day:02}.{generation}"
 
     match = CALVER.fullmatch(args.version)
@@ -67,9 +72,8 @@ def main() -> None:
         )
     else:
         # uv normalizes the version as PEP 440; Git tags keep CalVer's padded date.
-        expected = ".".join(str(int(part)) for part in match.groups())
-        if prepared != expected:
-            parser.error(f"pyproject.toml version {prepared!r} does not match requested release {args.version!r}")
+        if prepared != Version(args.version):
+            parser.error(f"pyproject.toml version {prepared_text!r} does not match requested release {args.version!r}")
 
         tag = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{args.version}"],
