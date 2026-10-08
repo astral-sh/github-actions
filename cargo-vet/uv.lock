@@ -1,0 +1,26 @@
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "astral-dev-toolchain-cargo-vet"
+version = "0.10.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/b7/d257a683b70825528821ac3b4dc48ed3847230e6e767a052d91a5006fb3e/astral_dev_toolchain_cargo_vet-0.10.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:9ba6d2e6289b755170d7e4a5fba6a65a1ec25e03c72b88228a9a69c27de134ec", size = 4972323, upload-time = "2026-08-31T17:11:33.403Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/8b/4ff2bd854968d9b0f090d3f4a54e6ecbc96bde4bc9e23221c726857f4189/astral_dev_toolchain_cargo_vet-0.10.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:30f313139c6ba6c5a244d338d71f1afe1921564896516456717b91294c80cb49", size = 4775195, upload-time = "2026-08-31T17:11:35.656Z" },
+    { url = "https://files.pythonhosted.org/packages/42/7a/c0fd0d2196f23d42f6de30633dc5170bffe0fe6f1a982b9d9aa4be857339/astral_dev_toolchain_cargo_vet-0.10.2-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e61faf3933487a0d373ce486f9dad81d26a3fda33aa1e5a88d1b43cd17cc7beb", size = 4323838, upload-time = "2026-08-31T17:11:37.546Z" },
+    { url = "https://files.pythonhosted.org/packages/22/58/c02039e896124829ce51f494bf368fc82a9a54ec889ca28b5821b5e6f8ad/astral_dev_toolchain_cargo_vet-0.10.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:726ea22b1e35b7cfc2ab36845b5cb622c1dffa57ff9ef8067cabefe17085c6c2", size = 4616893, upload-time = "2026-08-31T17:11:39.299Z" },
+    { url = "https://files.pythonhosted.org/packages/62/38/87953e636a0a72dffd8d868ad25a66ab63cd3ae8c452ff703572d3447219/astral_dev_toolchain_cargo_vet-0.10.2-py3-none-win_amd64.whl", hash = "sha256:6a87aeca00a8d1491af077684fda65468f29fc940a33bd98ca3c44a933be4195", size = 4645250, upload-time = "2026-08-31T17:11:41.435Z" },
+]
+
+[[package]]
+name = "cargo-vet-runner"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "astral-dev-toolchain-cargo-vet" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "astral-dev-toolchain-cargo-vet", specifier = "==0.10.2" }]
