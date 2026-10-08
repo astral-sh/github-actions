@@ -1,6 +1,6 @@
 [project]
 name = "astral-github-actions"
-version = "0.0.0"
+version = "2026.10.8.0"
 requires-python = ">=3.11"
 dependencies = []
 
