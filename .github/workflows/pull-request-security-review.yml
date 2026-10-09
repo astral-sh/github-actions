@@ -122,7 +122,7 @@ jobs:
 
       - name: "Review pull request"
         id: review
-        uses: openai/codex-action@c385816875cc2fc8e033ed9d1cba96f8c331210e # v1.11 + GitHub API retry
+        uses: openai/codex-action@a8d8be6ee028bea4525bc722d16f36687b408c81
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}/codex-security
