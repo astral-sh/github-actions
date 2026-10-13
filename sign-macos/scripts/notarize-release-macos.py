@@ -4,6 +4,8 @@
 #
 # [tool.uv]
 # no-build = true
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes"]
 # ///
 """Submit signed macOS executables to Apple's notarization service.
 

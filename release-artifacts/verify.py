@@ -5,6 +5,8 @@
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes"]
 # ///
 """Verify signed wheels and a GitHub archive with the native platform tools."""
 

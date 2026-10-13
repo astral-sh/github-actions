@@ -5,6 +5,8 @@
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes"]
 # ///
 """Prepare and validate the repository's CalVer releases."""
 

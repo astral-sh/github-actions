@@ -6,3 +6,5 @@ dependencies = []
 
 [tool.uv]
 package = false
+require-build-hashes = true
+preview-features = ["build-dependency-hashes"]
