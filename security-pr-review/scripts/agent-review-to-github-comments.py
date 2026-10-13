@@ -6,6 +6,8 @@
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes"]
 # ///
 
 """Convert a structured agent review into GitHub pull request review comment payloads."""

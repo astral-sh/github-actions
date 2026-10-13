@@ -5,6 +5,8 @@
 # [tool.uv]
 # no-build = true
 # exclude-newer = "P7D"
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes"]
 # ///
 """Prepare signing inputs after checking wheel and GitHub archive agreement."""
 

@@ -63,8 +63,8 @@ runs:
     - name: "Install uv"
       uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
-        version: "0.12.10"
-        checksum: "173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b"
+        version: "0.13.0"
+        checksum: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
         enable-cache: false
         python-version: "3.13"
         activate-environment: true
