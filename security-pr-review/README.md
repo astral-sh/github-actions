@@ -6,7 +6,10 @@ reviewed, and prepare and publish inline findings.
 The reusable workflow is
 [`pull-request-security-review.yml`](../.github/workflows/pull-request-security-review.yml).
 It loads its helpers from its own repository and commit, then checks out the
-caller's repository to review the pull request.
+caller's repository to review the pull request. The workflow requires GitHub.com
+and Actions runner 2.336.0 or newer for the
+[`$/` action reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-using-an-action-in-the-same-repository-as-the-workflow-at-the-running-commit-recommended),
+which loads the action from the workflow's own commit outside the caller checkout.
 
 The prompt, schema, plugin setup, and path coverage checks live here. Formatting
 and publishing findings use the shared [pull request review helpers](../pull-request-review/).
