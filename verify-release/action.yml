@@ -15,6 +15,13 @@ inputs:
     description: "Directory containing the assembled GitHub archive and its checksum sidecar."
     required: true
 
+  unsigned-directory:
+    description: "Directory containing this target's original executables, required with metadata-packages."
+    default: ""
+  metadata-packages:
+    description: "JSON array of declared wheel packages whose debug identities and embedded SBOMs must survive signing."
+    default: "[]"
+
 runs:
   using: "composite"
   steps:
@@ -24,11 +31,18 @@ runs:
         version: "0.12.10"
         enable-cache: false
 
+    - name: "Install LLVM metadata inspection tools"
+      if: inputs.metadata-packages != '[]'
+      shell: bash
+      run: rustup component add llvm-tools-preview
+
     - name: "Verify signed release artifacts"
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
         RELEASE_TARGET: ${{ inputs.target }}
+        METADATA_PACKAGES: ${{ inputs.metadata-packages }}
+        UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
         WHEELS_DIRECTORY: ${{ inputs.wheels-directory }}
         GITHUB_ARCHIVES_DIRECTORY: ${{ inputs.github-archives-directory }}
