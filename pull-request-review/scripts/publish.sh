@@ -8,6 +8,14 @@ set -euo pipefail
 
 printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
 
+if ! jq --exit-status --arg head "$HEAD_SHA" '
+  .commit_id == $head and .event == "COMMENT" and
+  (.body | type == "string") and (.comments | type == "array")
+' "$RUNNER_TEMP/review.json" > /dev/null; then
+  echo "Expected a prepared COMMENT review for the pull request head." >&2
+  exit 1
+fi
+
 if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
   echo "No actionable findings to publish."
   exit 0
@@ -24,12 +32,8 @@ if [ "$current_head_sha" != "$HEAD_SHA" ]; then
   exit 0
 fi
 
-jq --compact-output '.comments[]' "$RUNNER_TEMP/review.json" |
-while IFS= read -r comment; do
-  printf '%s\n' "$comment" |
-    gh api \
-      --method POST \
-      "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/comments" \
-      --input - \
-      --silent
-done
+gh api \
+  --method POST \
+  "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
+  --input "$RUNNER_TEMP/review.json" \
+  --silent
