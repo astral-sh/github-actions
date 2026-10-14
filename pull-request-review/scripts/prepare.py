@@ -71,7 +71,9 @@ def review_comment(finding: dict[str, Any]) -> dict[str, Any]:
         "path": str(path),
         "line": end,
         "side": side,
-        "body": f"**[P{finding['priority']}] {title}**\n\n{finding['body']}",
+        "body": without_mentions(
+            f"**[P{finding['priority']}] {title}**\n\n{finding['body']}"
+        ),
     }
     if start != end:
         comment["start_line"] = start
