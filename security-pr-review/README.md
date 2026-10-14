@@ -8,6 +8,9 @@ The reusable workflow is
 It loads its helpers from its own repository and commit, then checks out the
 caller's repository to review the pull request.
 
+The prompt, schema, plugin setup, and path coverage checks live here. Formatting
+and publishing findings use the shared [pull request review helpers](../pull-request-review/).
+
 ## Usage
 
 Pin the workflow to a full commit SHA. Restrict the caller to same-repository
