@@ -114,7 +114,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         "AZURE_KEYVAULT_KEY_VERSION",
         "KEY_NAME",
         "CERTIFICATE_SHA256",
-        "BINARY_IDENTIFIERS",
     )
     for name in required:
         if not os.environ.get(name):
@@ -124,7 +123,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
     entitled_binaries = set(json.loads(os.environ.get("ENTITLEMENTS_BINARIES", "[]")))
     if bool(entitlements) != bool(entitled_binaries):
         raise ValueError("Provide both an entitlements file and its executable paths")
-    identifiers = json.loads(os.environ["BINARY_IDENTIFIERS"])
 
     with tempfile.TemporaryDirectory() as temporary:
         components = Path(temporary)
@@ -166,10 +164,6 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                 for source in target.rglob("*")
                 if source.is_file()
             }
-            if identifiers.keys() != sources.keys():
-                raise ValueError(
-                    f"Binary identifier paths differ from {target.name}'s binaries"
-                )
             if not entitled_binaries <= sources.keys():
                 raise ValueError(f"Missing entitled executables in {target.name}")
             for relative, source in sorted(sources.items()):
@@ -194,7 +188,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             "--pkcs11-key-label",
                             os.environ["KEY_NAME"],
                             "--binary-identifier",
-                            identifiers[relative],
+                            source.name,
                             "--code-signature-flags",
                             "runtime",
                             "--arm64-16k-code-pages",
