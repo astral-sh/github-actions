@@ -187,6 +187,8 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             certificate,
                             "--pkcs11-key-label",
                             os.environ["KEY_NAME"],
+                            "--binary-identifier",
+                            f"sh.astral.{source.name}",
                             "--code-signature-flags",
                             "runtime",
                             "--arm64-16k-code-pages",
