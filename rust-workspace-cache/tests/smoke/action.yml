@@ -1,0 +1,10 @@
+name: Workspace cache smoke fixture
+description: Create a Cargo workspace and check its artifacts after the cache post steps.
+outputs:
+  workspace:
+    description: Absolute path of the temporary Cargo workspace.
+runs:
+  using: node24
+  main: setup.cjs
+  post: check.cjs
+  post-if: success()

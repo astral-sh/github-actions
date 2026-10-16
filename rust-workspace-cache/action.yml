@@ -1,0 +1,53 @@
+name: Rust workspace cache
+description: Cache Cargo dependencies and workspace crates, pruning superseded workspace artifacts before saving.
+
+inputs:
+  workspace:
+    description: Cargo workspace directory.
+    default: "."
+  target-directory:
+    description: Cargo target directory, relative to the workspace.
+    default: "target"
+  profile:
+    description: Build profile directory within the target directory.
+    default: "debug"
+  prefix-key:
+    description: Cache key prefix; change it to invalidate existing caches.
+    default: "v1-rust-workspace"
+  key:
+    description: Additional cache key passed to Swatinem/rust-cache.
+    default: ""
+  add-job-id-key:
+    description: Include the job ID in the cache key.
+    default: "true"
+  save-if:
+    description: Save the cache after a successful job when this is true.
+    default: "true"
+
+outputs:
+  cache-hit:
+    description: Whether an exact cache match was restored.
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Rust workspace cache
+      id: cache
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        prefix-key: ${{ inputs.prefix-key }}
+        key: ${{ inputs.key }}
+        workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
+        cache-workspace-crates: "true"
+        add-job-id-key: ${{ inputs.add-job-id-key }}
+        save-if: ${{ inputs.save-if }}
+
+    # Post steps run in reverse order, so pruning finishes before the cache is saved.
+    - name: Track workspace artifacts
+      uses: $/rust-workspace-cache/prune
+      with:
+        workspace: ${{ inputs.workspace }}
+        target-directory: ${{ inputs.target-directory }}
+        profile: ${{ inputs.profile }}
+        enabled: ${{ inputs.save-if == 'true' && steps.cache.outputs.cache-hit != 'true' }}
