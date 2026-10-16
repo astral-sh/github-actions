@@ -41,6 +41,7 @@ jobs:
         uses: $/rust-workspace-cache
         with:
           workspace: ${{ steps.fixture.outputs.workspace }}
+          cache-bin: ${{ runner.os != 'macOS' }}
           prefix-key: test-rust-workspace-cache
           key: ${{ github.run_id }}-${{ github.run_attempt }}
 
