@@ -40,9 +40,9 @@ signing certificate once for all targets. It verifies the component SHA-256
 digests and certificate fingerprint before signing with the hardened runtime.
 Private signing keys remain in Azure Key Vault.
 
-The action uses each binary's filename as its code-signing identifier. The
-identifier remains stable across architectures and releases when the filename
-is unchanged.
+The action sets each binary's code-signing identifier to
+`sh.astral.<filename>`, keeping it stable across architectures and releases when
+the filename is unchanged.
 
 The action uses 16 KiB code-signature pages for ARM64 Mach-O binaries, reducing
 the number of code slots macOS hashes during signature verification. Other
