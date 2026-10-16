@@ -43,7 +43,7 @@ digests and certificate fingerprint before signing with the hardened runtime.
 Private signing keys remain in Azure Key Vault.
 
 `binary-identifiers` maps every binary path relative to a target directory to
-its stable program identity. The paths must exactly match every target's
+its stable code-signing identifier. The paths must exactly match every target's
 contents. Use the same reverse-DNS identifiers across architectures and
 releases so policies that use the identifier can match successive versions.
 

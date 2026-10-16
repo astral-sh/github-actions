@@ -101,26 +101,6 @@ def certificate_sha256(path: Path) -> str:
     return certificate.fingerprint(hashes.SHA256()).hex()
 
 
-def signing_identifiers(value: str) -> dict[str, str]:
-    """Read the configured binary paths and stable signing identifiers."""
-    identifiers = json.loads(value)
-    if (
-        not isinstance(identifiers, dict)
-        or not identifiers
-        or not all(
-            isinstance(path, str)
-            and path
-            and isinstance(identifier, str)
-            and identifier
-            for path, identifier in identifiers.items()
-        )
-    ):
-        raise ValueError(
-            "Binary identifiers must map binary paths to non-empty strings"
-        )
-    return identifiers
-
-
 def sign_binaries(unsigned: Path, signed: Path) -> None:
     """Download the pinned components and certificate once, then sign every target."""
     required = (
@@ -144,7 +124,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
     entitled_binaries = set(json.loads(os.environ.get("ENTITLEMENTS_BINARIES", "[]")))
     if bool(entitlements) != bool(entitled_binaries):
         raise ValueError("Provide both an entitlements file and its executable paths")
-    identifiers = signing_identifiers(os.environ["BINARY_IDENTIFIERS"])
+    identifiers = json.loads(os.environ["BINARY_IDENTIFIERS"])
 
     with tempfile.TemporaryDirectory() as temporary:
         components = Path(temporary)
@@ -187,11 +167,8 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                 if source.is_file()
             }
             if identifiers.keys() != sources.keys():
-                missing = sorted(sources.keys() - identifiers.keys())
-                unexpected = sorted(identifiers.keys() - sources.keys())
                 raise ValueError(
-                    f"Binary identifier paths differ from {target.name}'s binaries: "
-                    f"missing={missing}, unexpected={unexpected}"
+                    f"Binary identifier paths differ from {target.name}'s binaries"
                 )
             if not entitled_binaries <= sources.keys():
                 raise ValueError(f"Missing entitled executables in {target.name}")

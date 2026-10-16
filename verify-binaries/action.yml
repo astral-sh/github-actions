@@ -8,10 +8,6 @@ inputs:
   binaries-directory:
     description: "Directory containing only the packaged native binaries, with the same relative paths."
     required: true
-  macos-binary-identifiers:
-    description: "JSON object mapping macOS binary paths relative to binaries-directory to expected signing identifiers. Required on macOS."
-    required: false
-    default: "{}"
 
 runs:
   using: "composite"
@@ -29,5 +25,4 @@ runs:
         PYTHONPATH: ${{ github.action_path }}/../release-artifacts
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
         BINARIES_DIRECTORY: ${{ inputs.binaries-directory }}
-        MACOS_BINARY_IDENTIFIERS: ${{ inputs.macos-binary-identifiers }}
       run: uv run --locked "$ACTION_PATH/../release-artifacts/verify-binaries.py" "$SIGNED_DIRECTORY" "$BINARIES_DIRECTORY"

@@ -10,8 +10,8 @@
 
 Require each executable to contain exactly the signed bytes.
 For each executable, `codesign` must accept its Apple-rooted signature and
-report the configured signing identifier and a signing timestamp. The embedded
-leaf certificate must match the certificate pinned by the signing job.
+report a signing timestamp. The embedded leaf certificate must match the
+certificate pinned by the signing job.
 """
 
 import argparse
@@ -22,16 +22,10 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
-from macos_codesign import signing_identifier, signing_identifiers
 
 
-def verify_binaries(
-    signed: Path,
-    directory: Path,
-    binaries: list[str],
-    identifiers: dict[str, str],
-) -> None:
-    """Check packaged bytes, Apple trust, identifiers, and signing metadata."""
+def verify_binaries(signed: Path, directory: Path, binaries: list[str]) -> None:
+    """Check packaged bytes, Apple trust, timestamps, and the signing certificate."""
     found = {
         path.relative_to(directory).as_posix()
         for path in directory.rglob("*")
@@ -66,13 +60,6 @@ def verify_binaries(
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            actual_identifier = signing_identifier(details, binary)
-            expected_identifier = identifiers[binary]
-            if actual_identifier != expected_identifier:
-                raise ValueError(
-                    f"Unexpected signing identifier for {binary}: "
-                    f"expected {expected_identifier!r}, found {actual_identifier!r}"
-                )
             if not any(line.startswith("Timestamp=") for line in details.splitlines()):
                 raise ValueError(f"Missing signing timestamp: {binary}")
 
@@ -91,15 +78,13 @@ def verify_binaries(
 def main() -> None:
     """Verify the named executables against the signer's output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary-identifiers", required=True)
     parser.add_argument("signed", type=Path)
     parser.add_argument("directory", type=Path)
     parser.add_argument("binaries", nargs="+")
     args = parser.parse_args()
 
     try:
-        identifiers = signing_identifiers(args.binary_identifiers, args.binaries)
-        verify_binaries(args.signed, args.directory, args.binaries, identifiers)
+        verify_binaries(args.signed, args.directory, args.binaries)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

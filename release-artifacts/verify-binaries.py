@@ -8,7 +8,6 @@
 """Verify a directory of packaged native binaries against the signing output."""
 
 import argparse
-import os
 from pathlib import Path
 
 from verify import verify_native
@@ -27,12 +26,7 @@ def main() -> None:
     )
     if not binaries:
         parser.error("No packaged binaries to verify")
-    verify_native(
-        args.signed,
-        args.binaries,
-        binaries,
-        os.environ.get("MACOS_BINARY_IDENTIFIERS", ""),
-    )
+    verify_native(args.signed, args.binaries, binaries)
 
 
 if __name__ == "__main__":

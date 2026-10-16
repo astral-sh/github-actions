@@ -14,11 +14,7 @@ Use a native runner. The action installs `uv`. Windows also requires PowerShell
   with:
     signed-directory: signed/aarch64-apple-darwin
     binaries-directory: packaged-binaries
-    macos-binary-identifiers: '{"uv": "sh.astral.uv", "uvx": "sh.astral.uvx"}'
 ```
-
-On macOS, `macos-binary-identifiers` must include exactly one stable signing
-identifier for every binary path relative to `binaries-directory`.
 
 The caller remains responsible for the archive's complete native-code inventory,
 metadata, checksums, and installation smoke tests.

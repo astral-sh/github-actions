@@ -14,9 +14,6 @@ inputs:
   github-archives-directory:
     description: "Directory containing the assembled GitHub archive and its checksum sidecar."
     required: true
-  macos-binary-identifiers:
-    description: "JSON object mapping declared macOS binary names to expected code-signing identifiers. Required on macOS."
-    default: "{}"
 
 runs:
   using: "composite"
@@ -35,5 +32,4 @@ runs:
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
         WHEELS_DIRECTORY: ${{ inputs.wheels-directory }}
         GITHUB_ARCHIVES_DIRECTORY: ${{ inputs.github-archives-directory }}
-        MACOS_BINARY_IDENTIFIERS: ${{ inputs.macos-binary-identifiers }}
       run: uv run --locked "$ACTION_PATH/../release-artifacts/verify.py" "$SIGNED_DIRECTORY" "$WHEELS_DIRECTORY" "$GITHUB_ARCHIVES_DIRECTORY"

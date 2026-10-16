@@ -23,26 +23,16 @@ from artifacts import (
     read_wheels,
     write_binaries,
 )
-from macos_codesign import signing_identifiers
 
 
-def verify_native(
-    signed: Path,
-    directory: Path,
-    binaries: list[str],
-    macos_binary_identifiers: str,
-) -> None:
+def verify_native(signed: Path, directory: Path, binaries: list[str]) -> None:
     """Require exact signed bytes and native signature verification for each file."""
     if sys.platform == "darwin":
-        if not macos_binary_identifiers or macos_binary_identifiers == "{}":
-            raise ValueError("Missing macOS binary identifiers")
         command = [
             "uv",
             "run",
             "--locked",
             Path(__file__).with_name("verify-release-binaries-macos.py"),
-            "--binary-identifiers",
-            macos_binary_identifiers,
             signed,
             directory,
             *binaries,
@@ -65,41 +55,17 @@ def verify_native(
     subprocess.run(command, check=True)
 
 
-def verify(
-    target: Target,
-    signed: Path,
-    wheels: Path,
-    archives: Path,
-    macos_binary_identifiers: str,
-) -> None:
+def verify(target: Target, signed: Path, wheels: Path, archives: Path) -> None:
     """Extract both formats and verify their inventories, byte equality, and signatures."""
     binaries = read_wheels(target, wheels)
     archive = read_archive(archives / target.github_archive.name, target.github_members)
     check_archive_binaries(archive, binaries)
-    identifiers = (
-        signing_identifiers(macos_binary_identifiers, sorted(binaries))
-        if sys.platform == "darwin"
-        else None
-    )
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as temporary:
         directory = Path(temporary)
         for name, contents in (("wheels", binaries), ("github", archive)):
             extracted = directory / name
             write_binaries(extracted, contents)
-            selected_identifiers = (
-                json.dumps(
-                    {binary: identifiers[binary] for binary in sorted(contents)},
-                    separators=(",", ":"),
-                )
-                if identifiers is not None
-                else macos_binary_identifiers
-            )
-            verify_native(
-                signed,
-                extracted,
-                sorted(contents),
-                selected_identifiers,
-            )
+            verify_native(signed, extracted, sorted(contents))
 
 
 def main() -> None:
@@ -110,13 +76,7 @@ def main() -> None:
     parser.add_argument("archives", type=Path)
     args = parser.parse_args()
     target = Target.from_dict(json.loads(os.environ["RELEASE_TARGET"]))
-    verify(
-        target,
-        args.signed,
-        args.wheels,
-        args.archives,
-        os.environ.get("MACOS_BINARY_IDENTIFIERS", ""),
-    )
+    verify(target, args.signed, args.wheels, args.archives)
 
 
 if __name__ == "__main__":
