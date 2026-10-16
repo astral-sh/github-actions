@@ -14,6 +14,8 @@ identity. Release approval and artifact downloads/uploads belong to the caller.
   with:
     unsigned-directory: ${{ github.workspace }}/unsigned
     signed-directory: ${{ github.workspace }}/signed
+    binary-identifiers: >-
+      {"example":"sh.astral.example","example-helper":"sh.astral.example.helper"}
     azure-client-id: ${{ secrets.CODESIGN_AZURE_CLIENT_ID_MACOS }}
     azure-tenant-id: ${{ secrets.CODESIGN_AZURE_TENANT_ID_MACOS }}
     azure-subscription-id: ${{ secrets.CODESIGN_AZURE_SUBSCRIPTION_ID_MACOS }}
@@ -39,6 +41,11 @@ The action downloads `rcodesign`, the Azure Key Vault PKCS#11 library, and the
 signing certificate once for all targets. It verifies the component SHA-256
 digests and certificate fingerprint before signing with the hardened runtime.
 Private signing keys remain in Azure Key Vault.
+
+`binary-identifiers` maps every binary path relative to a target directory to
+its stable program identity. The paths must exactly match every target's
+contents. Use the same reverse-DNS identifiers across architectures and
+releases so policies that use the identifier can match successive versions.
 
 The action uses 16 KiB code-signature pages for ARM64 Mach-O binaries, reducing
 the number of code slots macOS hashes during signature verification. Other

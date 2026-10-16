@@ -8,6 +8,9 @@ inputs:
   signed-directory:
     description: "New output directory for signed targets and their certificates. Must not exist."
     required: true
+  binary-identifiers:
+    description: "JSON object mapping binary paths relative to each target directory to stable code-signing identifiers."
+    required: true
   entitlements-file:
     description: "Optional plist containing entitlements for the named executable paths."
     default: ""
@@ -92,6 +95,7 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         UNSIGNED_DIRECTORY: ${{ inputs.unsigned-directory }}
         SIGNED_DIRECTORY: ${{ inputs.signed-directory }}
+        BINARY_IDENTIFIERS: ${{ inputs.binary-identifiers }}
         ENTITLEMENTS_FILE: ${{ inputs.entitlements-file }}
         ENTITLEMENTS_BINARIES: ${{ inputs.entitlements-binaries }}
         STORAGE_ACCOUNT: ${{ inputs.storage-account }}
