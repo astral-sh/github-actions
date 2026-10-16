@@ -6,10 +6,23 @@ reviewed, and prepare and publish inline findings.
 The reusable workflow is
 [`pull-request-security-review.yml`](../.github/workflows/pull-request-security-review.yml).
 It loads its helpers from its own repository and commit, then checks out the
-caller's repository to review the pull request.
+caller's repository to review the pull request. The workflow requires GitHub.com
+and Actions runner 2.336.0 or newer for the
+[`$/` action reference](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-using-an-action-in-the-same-repository-as-the-workflow-at-the-running-commit-recommended),
+which loads the action from the workflow's own commit outside the caller checkout.
 
 The prompt, schema, plugin setup, and path coverage checks live here. Formatting
 and publishing findings use the shared [pull request review helpers](../pull-request-review/).
+
+The [composite action](action.yml) runs only the security review and returns its
+structured `result` after the path coverage check succeeds. Use it when a caller
+combines security findings with other reviews before publishing. The caller owns
+the job's Linux x86-64 runner, environment, timeout, and read-only GitHub permissions. Pass `openai-api-key`, `github-token`,
+`pull-request-number`, `base-sha`, `head-sha`, `uv-version`, and `uv-checksum`.
+The action also accepts the `threat-models` and `setup-command` inputs described
+below. It checks out the caller repository and saves its configuration before
+switching to the requested pull request head. Run other reviewers in separate
+jobs: this action replaces the checkout and removes sudo access.
 
 ## Usage
 
@@ -45,7 +58,39 @@ The caller needs an `automations` environment with `OPENAI_API_KEY` and
 | `helper-runner` | No | `ubuntu-latest` | Runner for preparing and publishing findings. |
 
 The `result` output contains the structured review. The `comments` output contains
-the prepared GitHub comment payloads.
+the prepared GitHub review payload.
+
+## Combining reviewers
+
+Use the composite action in a reviewer job and pass its job output to the
+[shared preparation and publishing helpers](../pull-request-review/). The action
+does not publish findings itself.
+
+```yaml
+jobs:
+  security:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.result }}
+    steps:
+      - id: review
+        uses: astral-sh/github-actions/security-pr-review@<commit-sha>
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
+          uv-version: "0.12.13"
+          uv-checksum: "745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+```
 
 ## Publishing integration
 
