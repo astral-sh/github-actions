@@ -20,6 +20,9 @@ inputs:
   add-job-id-key:
     description: Include the job ID in the cache key.
     default: "true"
+  cache-bin:
+    description: Cache binaries installed with Cargo.
+    default: "true"
   save-if:
     description: Save the cache after a successful job when this is true.
     default: "true"
@@ -41,6 +44,7 @@ runs:
         workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
         cache-workspace-crates: "true"
         add-job-id-key: ${{ inputs.add-job-id-key }}
+        cache-bin: ${{ inputs.cache-bin }}
         save-if: ${{ inputs.save-if }}
 
     # Post steps run in reverse order, so pruning finishes before the cache is saved.

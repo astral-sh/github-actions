@@ -41,6 +41,7 @@ evidence that Cargo tracked artifact usage.
 | `prefix-key`       | `v1-rust-workspace` | Cache key prefix.                                                                                              |
 | `key`              | Empty               | Additional cache key.                                                                                          |
 | `add-job-id-key`   | `true`              | Include the job ID in the cache key; set to `false` to share entries across jobs.                              |
+| `cache-bin`        | `true`              | Cache binaries installed with Cargo.                                                                          |
 | `save-if`          | `true`              | Whether to save a new cache entry after a successful job.                                                      |
 
 `workspace` and `target-directory` configure the cached paths. The build command
