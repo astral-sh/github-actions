@@ -1,0 +1,49 @@
+name: Test Rust workspace cache
+
+on:
+  pull_request:
+    paths:
+      - rust-workspace-cache/**
+      - .github/workflows/test-rust-workspace-cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUSTC_BOOTSTRAP: "1"
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test pruning and lifecycle
+        shell: bash
+        run: |
+          python -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
+          node --test rust-workspace-cache/prune/lifecycle.test.cjs
+
+      # Register this first so its post step checks the result after the cache post steps.
+      - name: Create workspace fixture
+        id: fixture
+        uses: $/rust-workspace-cache/tests/smoke
+
+      - name: Cache workspace
+        uses: $/rust-workspace-cache
+        with:
+          workspace: ${{ steps.fixture.outputs.workspace }}
+          prefix-key: test-rust-workspace-cache
+          key: ${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Build workspace
+        working-directory: ${{ steps.fixture.outputs.workspace }}
+        run: cargo build --locked --offline -Z checksum-freshness

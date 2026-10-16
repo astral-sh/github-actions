@@ -2,6 +2,8 @@
 
 Shared GitHub Actions for Astral projects.
 
+- [Rust workspace cache](rust-workspace-cache/): cache workspace crates and prune
+  superseded artifacts before saving.
 - [Create release pull request](create-release-pr/): commit prepared release files
   and create or update a pull request.
 - [Release smoke test](release-smoke-test/): test release artifacts in disposable containers.

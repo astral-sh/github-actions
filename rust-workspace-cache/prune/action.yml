@@ -1,0 +1,22 @@
+name: Prune Rust workspace cache
+description: Track Cargo artifact usage and prune superseded artifacts after a successful job.
+
+inputs:
+  workspace:
+    description: Cargo workspace directory.
+    required: true
+  target-directory:
+    description: Cargo target directory, relative to the workspace.
+    required: true
+  profile:
+    description: Build profile directory within the target directory.
+    required: true
+  enabled:
+    description: Whether to track and prune artifacts.
+    required: true
+
+runs:
+  using: node24
+  main: main.cjs
+  post: post.cjs
+  post-if: success()
