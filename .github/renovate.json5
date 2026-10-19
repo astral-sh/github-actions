@@ -18,7 +18,10 @@
   customManagers: [
     {
       customType: "regex",
-      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      managerFilePatterns: [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^security-pr-review/action\\.ya?ml$/",
+      ],
       matchStrings: ['codex-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
       depNameTemplate: "@openai/codex",
       datasourceTemplate: "npm",
