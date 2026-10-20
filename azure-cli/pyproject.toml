@@ -8,3 +8,7 @@ dependencies = ["azure-cli==2.90.0"]
 package = false
 no-build = true
 exclude-newer = "P7D"
+
+[tool.uv.exclude-newer-package]
+# Remove after certifi 2026.10.19 clears the seven-day cutoff.
+certifi = "2026-10-20T02:24:17Z"
