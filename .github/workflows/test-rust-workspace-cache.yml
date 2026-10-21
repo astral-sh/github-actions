@@ -47,10 +47,15 @@ jobs:
         uses: $/rust-workspace-cache
         with:
           workspace: ${{ steps.fixture.outputs.workspace }}
+          profile: |
+            debug
+            profiling
           cache-bin: ${{ runner.os != 'macOS' }}
           prefix-key: test-rust-workspace-cache
           key: ${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Build workspace
         working-directory: ${{ steps.fixture.outputs.workspace }}
-        run: cargo build --locked --offline -Z checksum-freshness
+        run: |
+          cargo build --locked --offline -Z checksum-freshness
+          cargo build --locked --offline -Z checksum-freshness --profile profiling

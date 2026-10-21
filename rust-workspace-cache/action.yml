@@ -9,7 +9,7 @@ inputs:
     description: Cargo target directory, relative to the workspace.
     default: "target"
   profile:
-    description: Build profile directory within the target directory.
+    description: Build profile directories within the target directory, separated by newlines.
     default: "debug"
   prefix-key:
     description: Cache key prefix; change it to invalidate existing caches.
