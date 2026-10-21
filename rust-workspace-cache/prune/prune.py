@@ -99,17 +99,22 @@ def prune_workspace_fingerprints(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("profile", type=Path, help="Cargo profile directory")
+    parser.add_argument(
+        "profiles", type=Path, nargs="+", help="Cargo profile directories"
+    )
     parser.add_argument("marker", type=Path, help="Marker created before the build")
     args = parser.parse_args()
 
-    stale, removed, active = prune_workspace_fingerprints(
-        args.profile, args.marker.stat().st_mtime_ns, workspace_packages(Path.cwd())
-    )
-    print(
-        f"Pruned {stale} superseded workspace fingerprints and {removed} artifact "
-        f"paths; retained {active} active fingerprints"
-    )
+    marker_timestamp = args.marker.stat().st_mtime_ns
+    packages = workspace_packages(Path.cwd())
+    for profile in args.profiles:
+        stale, removed, active = prune_workspace_fingerprints(
+            profile, marker_timestamp, packages
+        )
+        print(
+            f"{profile}: Pruned {stale} superseded workspace fingerprints and "
+            f"{removed} artifact paths; retained {active} active fingerprints"
+        )
 
 
 if __name__ == "__main__":
