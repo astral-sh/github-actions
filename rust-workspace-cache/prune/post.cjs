@@ -5,11 +5,20 @@ const { spawnSync } = require("node:child_process");
 if (process.env.STATE_cache) {
   const { workspace, profile, marker } = JSON.parse(process.env.STATE_cache);
   try {
-    const result = spawnSync(
-      process.platform === "win32" ? "python" : "python3",
-      [path.join(__dirname, "prune.py"), profile, marker],
-      { cwd: workspace, stdio: "inherit" },
+    const args = [path.join(__dirname, "prune.py"), profile, marker];
+    const options = { cwd: workspace, stdio: "inherit" };
+    let result = spawnSync(
+      "uv",
+      ["run", "--no-project", "--no-config", "--python", ">=3.11", ...args],
+      options,
     );
+    if (result.error?.code === "ENOENT") {
+      result = spawnSync(
+        process.platform === "win32" ? "python" : "python3",
+        args,
+        options,
+      );
+    }
     if (result.error) throw result.error;
     process.exitCode = result.status ?? 1;
   } finally {
