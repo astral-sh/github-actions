@@ -14,6 +14,12 @@ fs.writeFileSync(
   path.join(workspace, "src", "lib.rs"),
   "pub fn example() {}\n",
 );
+// Pruning must skip discovery of the caller's Python project and uv configuration.
+fs.writeFileSync(
+  path.join(workspace, "pyproject.toml"),
+  '[project]\nname = "workspace-cache-fixture"\nversion = "0.0.0"\nrequires-python = "==3.7.*"\ndependencies = []\n\n[tool.uv]\nrequired-version = "==0.0.1"\n',
+);
+fs.writeFileSync(path.join(workspace, ".python-version"), "3.7\n");
 const result = spawnSync("cargo", ["generate-lockfile", "--offline"], {
   cwd: workspace,
   stdio: "inherit",

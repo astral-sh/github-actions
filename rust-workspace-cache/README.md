@@ -16,9 +16,15 @@ by the build. Pruning leaves dependencies and unused workspace packages untouche
     RUSTC_BOOTSTRAP: "1"
 ```
 
-Install Rust before this action. Python 3.11 or newer must be available as
-`python3` on Linux and macOS, or `python` on Windows, when the job ends. Pruning
-also requires `cargo` and a current `Cargo.lock` in the workspace at that point.
+Install Rust before this action. Pruning uses `uv` from `PATH` when available,
+requesting Python 3.11 or newer without discovering the caller's Python project or
+`uv` configuration files. `uv` may download Python if no compatible interpreter is
+available. The action does not install `uv`.
+
+If `uv` is not found, Python 3.11 or newer must be available as `python3` on
+Linux and macOS, or `python` on Windows, when the job ends. Pruning also requires
+`cargo` and a current `Cargo.lock` in the workspace at that point. A failure from
+`uv` fails pruning; it does not retry with Python.
 
 The action sets `CARGO_UNSTABLE_MTIME_ON_USE` to `true` for subsequent steps when
 `save-if` is `true` and no exact cache match was restored; otherwise it sets the
@@ -41,7 +47,7 @@ evidence that Cargo tracked artifact usage.
 | `prefix-key`       | `v1-rust-workspace` | Cache key prefix.                                                                                              |
 | `key`              | Empty               | Additional cache key.                                                                                          |
 | `add-job-id-key`   | `true`              | Include the job ID in the cache key; set to `false` to share entries across jobs.                              |
-| `cache-bin`        | `true`              | Cache binaries installed with Cargo.                                                                          |
+| `cache-bin`        | `true`              | Cache binaries installed with Cargo.                                                                           |
 | `save-if`          | `true`              | Whether to save a new cache entry after a successful job.                                                      |
 
 `workspace` and `target-directory` configure the cached paths. The build command
