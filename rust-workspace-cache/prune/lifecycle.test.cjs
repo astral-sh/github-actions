@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
+const vm = require("node:vm");
 
 function setup(context, enabled) {
   const directory = fs.mkdtempSync(
@@ -73,4 +74,98 @@ test("the post step does nothing when no pruning state was recorded", () => {
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
+});
+
+function post(context, results, platform = process.platform) {
+  const { state: recorded } = setup(context, true);
+  const state = JSON.parse(recorded.slice("cache=".length));
+  const calls = [];
+  const childProcess = {
+    spawnSync(command, args, options) {
+      calls.push({ command, args: Array.from(args), options: { ...options } });
+      return results.shift();
+    },
+  };
+  const child = { env: { STATE_cache: JSON.stringify(state) }, platform };
+  try {
+    vm.runInNewContext(
+      fs.readFileSync(path.join(__dirname, "post.cjs"), "utf8"),
+      {
+        __dirname,
+        process: child,
+        require: (name) =>
+          name === "node:child_process" ? childProcess : require(name),
+      },
+    );
+  } finally {
+    assert.ok(!fs.existsSync(path.dirname(state.marker)));
+  }
+  return { state, calls, exitCode: child.exitCode };
+}
+
+test("prefers uv without discovering the caller's Python project or configuration", (context) => {
+  const result = post(context, [{ status: 0 }]);
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(result.calls, [
+    {
+      command: "uv",
+      args: [
+        "run",
+        "--no-project",
+        "--no-config",
+        "--python",
+        ">=3.11",
+        path.join(__dirname, "prune.py"),
+        result.state.profile,
+        result.state.marker,
+      ],
+      options: { cwd: result.state.workspace, stdio: "inherit" },
+    },
+  ]);
+});
+
+for (const [platform, python] of [
+  ["linux", "python3"],
+  ["darwin", "python3"],
+  ["win32", "python"],
+]) {
+  test(`falls back to ${python} on ${platform} when uv is missing`, (context) => {
+    const missing = Object.assign(new Error("uv is missing"), {
+      code: "ENOENT",
+    });
+    const result = post(context, [{ error: missing }, { status: 0 }], platform);
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(
+      result.calls.map((call) => call.command),
+      ["uv", python],
+    );
+    assert.deepEqual(result.calls[1].args, [
+      path.join(__dirname, "prune.py"),
+      result.state.profile,
+      result.state.marker,
+    ]);
+    assert.deepEqual(result.calls[1].options, {
+      cwd: result.state.workspace,
+      stdio: "inherit",
+    });
+  });
+}
+
+test("does not run pruning again when uv reports a failure", (context) => {
+  const result = post(context, [{ status: 7 }]);
+  assert.equal(result.exitCode, 7);
+  assert.deepEqual(
+    result.calls.map((call) => call.command),
+    ["uv"],
+  );
+});
+
+test("does not fall back when uv cannot be executed", (context) => {
+  const denied = Object.assign(new Error("uv is not executable"), {
+    code: "EACCES",
+  });
+  assert.throws(
+    () => post(context, [{ error: denied }]),
+    /uv is not executable/,
+  );
 });
