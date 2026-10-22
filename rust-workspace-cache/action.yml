@@ -23,6 +23,9 @@ inputs:
   cache-bin:
     description: Cache binaries installed with Cargo.
     default: "true"
+  restore-build-script-mtimes:
+    description: Restore timestamps of matching tracked files in workspace packages with build scripts.
+    default: "false"
   save-if:
     description: Save the cache after a successful job when this is true.
     default: "true"
@@ -35,17 +38,35 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Prepare build input cache
+      if: ${{ inputs.restore-build-script-mtimes == 'true' }}
+      id: inputs
+      uses: $/rust-workspace-cache/inputs/prepare
+      with:
+        workspace: ${{ inputs.workspace }}
+
     - name: Restore Rust workspace cache
       id: cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        prefix-key: ${{ inputs.prefix-key }}
+        prefix-key: ${{ inputs.restore-build-script-mtimes == 'true' && format('{0}-build-inputs-v1', inputs.prefix-key) || inputs.prefix-key }}
         key: ${{ inputs.key }}
         workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
         cache-workspace-crates: "true"
         add-job-id-key: ${{ inputs.add-job-id-key }}
         cache-bin: ${{ inputs.cache-bin }}
+        cache-directories: ${{ steps.inputs.outputs.directory }}
         save-if: ${{ inputs.save-if }}
+
+    - name: Restore build input timestamps
+      if: ${{ inputs.restore-build-script-mtimes == 'true' }}
+      uses: $/rust-workspace-cache/inputs
+      with:
+        workspace: ${{ inputs.workspace }}
+        target-directory: ${{ inputs.target-directory }}
+        profile: ${{ inputs.profile }}
+        directory: ${{ steps.inputs.outputs.directory }}
+        save: ${{ inputs.save-if == 'true' && steps.cache.outputs.cache-hit != 'true' }}
 
     # Post steps run in reverse order, so pruning finishes before the cache is saved.
     - name: Track workspace artifacts

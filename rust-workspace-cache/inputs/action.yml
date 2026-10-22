@@ -1,0 +1,25 @@
+name: Restore Rust build input timestamps
+description: Restore matching tracked inputs and record their timestamps before saving the cache.
+
+inputs:
+  workspace:
+    description: Cargo workspace directory.
+    required: true
+  target-directory:
+    description: Cargo target directory, relative to the workspace.
+    required: true
+  profile:
+    description: Build profile directories within the target directory, separated by newlines.
+    required: true
+  directory:
+    description: Cached input metadata directory.
+    required: true
+  save:
+    description: Record input metadata after a successful job.
+    required: true
+
+runs:
+  using: node24
+  main: main.cjs
+  post: post.cjs
+  post-if: success()
