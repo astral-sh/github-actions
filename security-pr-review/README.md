@@ -22,8 +22,8 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@<commit-sha>
     with:
-      uv-version: "0.13.4"
-      uv-checksum: "2b428396f12572d4429cf210ca234dd599a33b3af0958a4d5ed569d63e3f344f"
+      uv-version: "0.13.5"
+      uv-checksum: "f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f"
     secrets: inherit
     permissions:
       contents: read
