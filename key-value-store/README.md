@@ -21,7 +21,7 @@ the same full commit SHA.
 The following `.github/workflows/ci.yml` example uses the default `job` scope.
 The service's trusted policy must grant this workflow `read`, `write`,
 and `delete` for `job`. The service reads its configured policy
-path (default `.github/aghs-kv.json`) from the repository's `main`, independently
+path (default `.github/key-value-store.json`) from the repository's `main`, independently
 of the job's checkout. Protect that branch and policy edits.
 
 ```yaml
