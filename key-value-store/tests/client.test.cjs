@@ -20,16 +20,17 @@ function environment(overrides = {}) {
   };
 }
 
-function session() {
+function session(scope) {
   return new Response(JSON.stringify({
     access_token: token, token_type: "Bearer", expires_at: Math.floor(Date.now() / 1000) + 300,
+    scope,
   }));
 }
 
 function mock(operationResponse, overrides = {}) {
   const calls = [];
   const masks = [];
-  const responses = [new Response(JSON.stringify({ value: oidc })), session(), operationResponse];
+  const responses = [new Response(JSON.stringify({ value: oidc })), session(overrides.INPUT_SCOPE), operationResponse];
   return {
     calls, masks,
     options: {
@@ -114,11 +115,51 @@ test("invalid endpoints, namespace selectors, keys, and options fail before cred
     { INPUT_KEY: "key\n" }, { INPUT_KEY: "key?namespace=other" }, { INPUT_KEY: "a".repeat(257) },
     { INPUT_AUDIENCE: "has spaces" }, { INPUT_AUDIENCE: "🚀".repeat(513) },
     { INPUT_VALUE: "value", INPUT_PATH: "file" },
+    { INPUT_SCOPE: "Job" }, { INPUT_SCOPE: "job/other" }, { INPUT_SCOPE: " job" },
   ]) {
     const fixture = mock(undefined, overrides);
     await assert.rejects(run("put", fixture.options));
     assert.equal(fixture.calls.length, 0);
   }
+});
+
+test("scopes are requested during exchange and never become caller-selected namespace identifiers", async () => {
+  for (const scope of ["workflow", "run", "run-attempt", "job", "repository"]) {
+    const fixture = mock(new Response(null, { status: 204 }), { INPUT_SCOPE: scope });
+    await run("delete", fixture.options);
+    assert.deepEqual(JSON.parse(fixture.calls[1].body), { scope });
+    assert.equal(fixture.calls[1].headers["content-type"], "application/json");
+    assert.equal(fixture.calls[2].url, "https://kv.example/kv/build.result");
+    assert.equal(fixture.calls[2].body, undefined);
+  }
+});
+
+test("missing or mismatched scope confirmation never reaches the value API", async () => {
+  for (const [requested, confirmed] of [["job", undefined], ["job", "context"], ["job", "repository"], ["context", "job"]]) {
+    let calls = 0;
+    await assert.rejects(run("delete", {
+      env: environment({ INPUT_SCOPE: requested }), write: () => {},
+      fetchImpl: async () => ++calls === 1
+        ? new Response(JSON.stringify({ value: oidc }))
+        : session(confirmed),
+    }), /did not confirm the requested scope/);
+    assert.equal(calls, 2);
+  }
+});
+
+test("a denied scope is never retried with context or another scope", async () => {
+  const calls = [];
+  await assert.rejects(run("put", {
+    env: environment({ INPUT_SCOPE: "repository", INPUT_VALUE: "value" }), write: () => {},
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), ...options });
+      return calls.length === 1
+        ? new Response(JSON.stringify({ value: oidc }))
+        : new Response(null, { status: 403 });
+    },
+  }), /token exchange failed \(HTTP 403\)/);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(JSON.parse(calls[1].body), { scope: "repository" });
 });
 
 test("missing OIDC permission and unsafe issuer URLs fail before network access", async () => {

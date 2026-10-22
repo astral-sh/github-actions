@@ -8,8 +8,11 @@ inputs:
   audience:
     description: OIDC audience; defaults to the service-url origin.
     default: ""
+  scope:
+    description: Requested sharing scope (context, workflow, run, run-attempt, job, or repository); the service must authorize it.
+    default: context
   key:
-    description: Key within the namespace derived from the job's OIDC context.
+    description: Key within the namespace derived from the requested scope and verified OIDC claims.
     required: true
 
 runs:

@@ -8,6 +8,7 @@ const path = require("node:path");
 const MAX_VALUE_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 32 * 1024;
 const REQUEST_TIMEOUT_MS = 15_000;
+const SCOPES = new Set(["context", "workflow", "run", "run-attempt", "job", "repository"]);
 
 class ActionError extends Error {}
 
@@ -38,6 +39,10 @@ function optionsFromEnvironment(operation, env) {
   if (Buffer.byteLength(audience, "utf8") > 2048 || /\s/u.test(audience)) {
     throw new ActionError("audience must be at most 2048 UTF-8 bytes without whitespace");
   }
+  const scope = env.INPUT_SCOPE || "context";
+  if (!SCOPES.has(scope)) {
+    throw new ActionError("scope must be context, workflow, run, run-attempt, job, or repository");
+  }
   const key = env.INPUT_KEY || "";
   if (key.length < 1 || key.length > 256 || /[^A-Za-z0-9._-]/u.test(key) || key === "." || key === "..") {
     throw new ActionError("key must contain 1-256 ASCII letters, digits, dots, underscores, or hyphens, and cannot be . or ..");
@@ -54,7 +59,7 @@ function optionsFromEnvironment(operation, env) {
   if (operation === "get" && !env.GITHUB_OUTPUT) {
     throw new ActionError("GITHUB_OUTPUT is required");
   }
-  return { url, audience, key, file, value, maskValue: maskValue === "true" };
+  return { url, audience, scope, key, file, value, maskValue: maskValue === "true" };
 }
 
 async function readValueFile(file) {
@@ -185,7 +190,11 @@ async function exchange(options, env, fetchImpl, write) {
   command("add-mask", oidc.value, write);
   const session = await requestJson(fetchImpl, new URL("/exchange", options.url), {
     method: "POST",
-    headers: { authorization: `Bearer ${oidc.value}` },
+    headers: {
+      authorization: `Bearer ${oidc.value}`,
+      ...(options.scope !== "context" && { "content-type": "application/json" }),
+    },
+    ...(options.scope !== "context" && { body: JSON.stringify({ scope: options.scope }) }),
   }, "token exchange");
   if (typeof session?.access_token !== "string" || session.access_token.length !== 72 || !/^aghs_kv_[0-9a-f]{64}$/u.test(session.access_token)) {
     throw new ActionError("exchange response did not contain a valid session token");
@@ -193,6 +202,9 @@ async function exchange(options, env, fetchImpl, write) {
   command("add-mask", session.access_token, write);
   if (session.token_type !== "Bearer" || !Number.isSafeInteger(session.expires_at) || session.expires_at <= Math.floor(Date.now() / 1000)) {
     throw new ActionError("exchange response contained an invalid or expired session");
+  }
+  if ((options.scope !== "context" || session.scope !== undefined) && session.scope !== options.scope) {
+    throw new ActionError("exchange response did not confirm the requested scope");
   }
   return session.access_token;
 }
