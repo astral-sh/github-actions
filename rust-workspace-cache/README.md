@@ -39,20 +39,31 @@ evidence that Cargo tracked artifact usage.
 
 ## Inputs
 
-| Input              | Default             | Description                                                                                                    |
-| ------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `workspace`        | `.`                 | Cargo workspace directory, relative to the checkout or absolute.                                               |
-| `target-directory` | `target`            | Cargo target directory, relative to `workspace`.                                                               |
-| `profile`          | `debug`             | Profile directory within `target-directory`, such as `fast-build-nightly` or `x86_64-unknown-linux-gnu/debug`. |
-| `prefix-key`       | `v1-rust-workspace` | Cache key prefix.                                                                                              |
-| `key`              | Empty               | Additional cache key.                                                                                          |
-| `add-job-id-key`   | `true`              | Include the job ID in the cache key; set to `false` to share entries across jobs.                              |
-| `cache-bin`        | `true`              | Cache binaries installed with Cargo.                                                                           |
-| `save-if`          | `true`              | Whether to save a new cache entry after a successful job.                                                      |
+| Input              | Default             | Description                                                                                                                              |
+| ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace`        | `.`                 | Cargo workspace directory, relative to the checkout or absolute.                                                                         |
+| `target-directory` | `target`            | Cargo target directory, relative to `workspace`.                                                                                         |
+| `profile`          | `debug`             | Profile directories within `target-directory`, separated by newlines, such as `debug`, `profiling`, or `x86_64-unknown-linux-gnu/debug`. |
+| `prefix-key`       | `v1-rust-workspace` | Cache key prefix.                                                                                                                        |
+| `key`              | Empty               | Additional cache key.                                                                                                                    |
+| `add-job-id-key`   | `true`              | Include the job ID in the cache key; set to `false` to share entries across jobs.                                                        |
+| `cache-bin`        | `true`              | Cache binaries installed with Cargo.                                                                                                     |
+| `save-if`          | `true`              | Whether to save a new cache entry after a successful job.                                                                                |
 
 `workspace` and `target-directory` configure the cached paths. The build command
-must use the same workspace and target directory. `profile` selects the directory
-to prune; other profile directories are left unchanged.
+must use the same workspace and target directory. `profile` selects the directories
+to prune; other profile directories are left unchanged. When pruning runs, each
+selected profile must contain active Cargo fingerprints from the job.
+
+For jobs that build multiple profiles:
+
+```yaml
+- uses: astral-sh/github-actions/rust-workspace-cache@<commit-sha>
+  with:
+    profile: |
+      debug
+      profiling
+```
 
 With `add-job-id-key: "false"`, jobs can share entries when the remaining cache key
 components and GitHub cache scope also match.

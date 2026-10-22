@@ -3,9 +3,9 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 if (process.env.STATE_cache) {
-  const { workspace, profile, marker } = JSON.parse(process.env.STATE_cache);
+  const { workspace, profiles, marker } = JSON.parse(process.env.STATE_cache);
   try {
-    const args = [path.join(__dirname, "prune.py"), profile, marker];
+    const args = [path.join(__dirname, "prune.py"), ...profiles, marker];
     const options = { cwd: workspace, stdio: "inherit" };
     let result = spawnSync(
       "uv",

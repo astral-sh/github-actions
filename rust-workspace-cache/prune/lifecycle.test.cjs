@@ -6,7 +6,7 @@ const path = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
 
-function setup(context, enabled) {
+function setup(context, enabled, profile = "fast-build-nightly") {
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), "workspace-cache-test-"),
   );
@@ -27,7 +27,7 @@ function setup(context, enabled) {
         INPUT_ENABLED: String(enabled),
         INPUT_WORKSPACE: workspace,
         "INPUT_TARGET-DIRECTORY": "build-output",
-        INPUT_PROFILE: "fast-build-nightly",
+        INPUT_PROFILE: profile,
         GITHUB_ENV: environment,
         GITHUB_STATE: state,
         RUNNER_TEMP: directory,
@@ -48,13 +48,21 @@ test("records an isolated marker and the external workspace for pruning", (conte
   assert.equal(result.environment, "CARGO_UNSTABLE_MTIME_ON_USE=true\n");
   const state = JSON.parse(result.state.slice("cache=".length));
   assert.equal(state.workspace, result.workspace);
-  assert.equal(
-    state.profile,
+  assert.deepEqual(state.profiles, [
     path.join(result.workspace, "build-output", "fast-build-nightly"),
-  );
+  ]);
   assert.ok(fs.statSync(state.marker).isFile());
   const other = JSON.parse(setup(context, true).state.slice("cache=".length));
   assert.notEqual(state.marker, other.marker);
+});
+
+test("records each profile independently and accepts Windows line endings", (context) => {
+  const result = setup(context, true, "debug\r\n\r\n profiling \r\n");
+  const state = JSON.parse(result.state.slice("cache=".length));
+  assert.deepEqual(state.profiles, [
+    path.join(result.workspace, "build-output", "debug"),
+    path.join(result.workspace, "build-output", "profiling"),
+  ]);
 });
 
 test("disables usage tracking and pruning when the cache will not be saved", (context) => {
@@ -116,7 +124,7 @@ test("prefers uv without discovering the caller's Python project or configuratio
         "--python",
         ">=3.11",
         path.join(__dirname, "prune.py"),
-        result.state.profile,
+        ...result.state.profiles,
         result.state.marker,
       ],
       options: { cwd: result.state.workspace, stdio: "inherit" },
@@ -141,7 +149,7 @@ for (const [platform, python] of [
     );
     assert.deepEqual(result.calls[1].args, [
       path.join(__dirname, "prune.py"),
-      result.state.profile,
+      ...result.state.profiles,
       result.state.marker,
     ]);
     assert.deepEqual(result.calls[1].options, {
