@@ -91,6 +91,21 @@ def scan(root: Path) -> dict:
     }
 
 
+def restorable_directories(snapshot: dict) -> set[str]:
+    files = {Path(name) for name in snapshot["files"]}
+    directories = {Path(name) for name in snapshot["directories"]}
+    blocked = set()
+    for name, record in snapshot["directories"].items():
+        directory = Path(name)
+        if any(
+            directory / entry not in files
+            and not (kind == stat.S_IFDIR and directory / entry in directories)
+            for entry, kind in record["entries"]
+        ):
+            blocked.update([directory, *directory.parents])
+    return {name for name in snapshot["directories"] if Path(name) not in blocked}
+
+
 def invalidate_build_scripts(profiles: list[Path], packages: set[str]) -> int:
     removed = 0
     for profile in profiles:
@@ -120,6 +135,7 @@ def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
     if saved["version"] != 1:
         raise ValueError("Unsupported input timestamp manifest")
     current = scan(root)
+    safe_directories = restorable_directories(current)
     changed_paths = set()
     matching = {"files": [], "directories": []}
     for group, key in [("files", "identity"), ("directories", "entries")]:
@@ -127,7 +143,8 @@ def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
             previous = saved[group].get(name)
             record = current[group].get(name)
             if record and previous and record[key] == previous[key]:
-                matching[group].append(name)
+                if group != "directories" or name in safe_directories:
+                    matching[group].append(name)
             else:
                 changed_paths.add(name)
     changed_packages = {

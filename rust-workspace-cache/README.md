@@ -79,8 +79,10 @@ when their source files are unchanged. Set `restore-build-script-mtimes: "true"`
 to cache hashes, modes, and timestamps for Git-tracked regular files in workspace
 packages with build scripts, together with their directory entry lists. After
 restoring artifacts, the action restores timestamps for matching files and for
-directories whose entry lists match. Changed tracked inputs or directory entries
-invalidate cached build-script runs and their corresponding output directories in
+directories whose entry lists match and whose contents consist only of tracked
+regular files in the snapshot and directories containing them. It leaves the
+timestamps of directories containing symlinks or entries outside the snapshot, and
+their ancestors, unchanged. Changed tracked inputs or directory entries invalidate cached build-script runs and their corresponding output directories in
 the selected profiles.
 
 This option does not compare the contents of Git metadata, symlinks, untracked

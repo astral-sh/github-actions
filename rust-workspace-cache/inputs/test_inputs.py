@@ -134,6 +134,23 @@ class CargoInputsTest(unittest.TestCase):
         self.assertEqual(self.restore()["invalidated_build_scripts"], 1)
         self.build("extra+original", rebuilt=True)
 
+    def test_replaced_untracked_input_keeps_directory_timestamp(self) -> None:
+        extra = self.root / "inputs/extra.txt"
+        extra.write_text("old+")
+        self.build("old+original", rebuilt=True)
+        self.saved = inputs.scan(self.root)
+        old = extra.stat().st_mtime_ns
+        extra.unlink()
+        extra.write_text("new+")
+        os.utime(extra, ns=(old, old))
+        directory = extra.parent
+        modified = time.time_ns() + 1_000_000_000
+        os.utime(directory, ns=(modified, modified))
+        modified = directory.stat().st_mtime_ns
+        self.restore()
+        self.assertEqual(directory.stat().st_mtime_ns, modified)
+        self.build("new+original", rebuilt=True)
+
     def test_deleted_tracked_input_rebuilds(self) -> None:
         self.value.unlink()
         self.assertEqual(self.restore()["invalidated_build_scripts"], 1)
