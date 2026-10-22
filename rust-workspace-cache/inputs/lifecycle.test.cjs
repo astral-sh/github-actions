@@ -7,8 +7,8 @@ const { test } = require("node:test");
 const vm = require("node:vm");
 
 function fixture(context) {
-  const directory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "cache-input-lifecycle-"),
+  const directory = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "cache-input-lifecycle-")),
   );
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const workspace = path.join(directory, "workspace with spaces");

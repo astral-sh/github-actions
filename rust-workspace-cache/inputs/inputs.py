@@ -141,12 +141,12 @@ def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
     for group, names in matching.items():
         for name in names:
             path = safe_path(root, name)
-            if path is None:
+            if path is None or path.is_symlink():
                 continue
             os.utime(
                 path,
                 ns=(path.stat().st_atime_ns, saved[group][name]["mtime_ns"]),
-                follow_symlinks=False,
+                follow_symlinks=os.utime not in os.supports_follow_symlinks,
             )
     # Refresh stat information so a later forced checkout does not rewrite
     # unchanged files merely because their timestamps were restored.
