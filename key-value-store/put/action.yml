@@ -1,0 +1,23 @@
+name: Write a key-value entry
+description: Create or replace workflow state in the current GitHub Actions OIDC namespace.
+
+inputs:
+  service-url:
+    description: HTTPS origin of the key-value service.
+    required: true
+  audience:
+    description: OIDC audience; defaults to the service-url origin.
+    default: ""
+  key:
+    description: Key within the namespace derived from the job's OIDC context.
+    required: true
+  value:
+    description: UTF-8 value, including whitespace. Defaults to an empty value. Do not combine a nonempty value with path.
+    default: ""
+  path:
+    description: Regular file containing raw value bytes; mutually exclusive with a nonempty value.
+    default: ""
+
+runs:
+  using: node24
+  main: main.cjs
