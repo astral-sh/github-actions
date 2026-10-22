@@ -2,6 +2,8 @@
 
 Shared GitHub Actions for Astral projects.
 
+- [Simple token service](simple-token-service/): exchange GitHub Actions OIDC tokens
+  for scoped GitHub App installation tokens.
 - [Key-value store](key-value-store/): share workflow state within a GitHub Actions
   OIDC namespace.
 - [Rust workspace cache](rust-workspace-cache/): cache workspace crates and prune

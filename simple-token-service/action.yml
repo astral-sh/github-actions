@@ -1,0 +1,37 @@
+name: Exchange GitHub OIDC token
+description: Exchange a GitHub Actions OIDC token for a scoped GitHub App installation token.
+
+inputs:
+  exchange-url:
+    description: Full HTTPS URL of the token service exchange endpoint.
+    required: true
+  audience:
+    description: HTTPS OIDC audience configured in the token service policy.
+    required: true
+  repository:
+    description: Target repository requested from the token service policy.
+    required: false
+  repositories:
+    description: Newline-delimited target repositories requested from a multi-repository token service policy rule.
+    required: false
+  permissions:
+    description: Newline-delimited GitHub App repository permissions requested from the token service policy.
+    required: false
+
+outputs:
+  token:
+    description: Short-lived GitHub App installation token.
+  expires-at:
+    description: Expiration time reported by GitHub.
+  repository:
+    description: Repository authorized by the exchange policy.
+  repositories:
+    description: Newline-delimited repositories authorized by a multi-repository exchange policy.
+  ref:
+    description: Git ref authorized by the exchange policy.
+
+runs:
+  using: node24
+  main: action/main.js
+  post: action/post.js
+  post-if: always()
