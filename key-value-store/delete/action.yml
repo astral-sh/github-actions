@@ -1,0 +1,17 @@
+name: Delete a key-value entry
+description: Delete workflow state from the current GitHub Actions OIDC namespace.
+
+inputs:
+  service-url:
+    description: HTTPS origin of the key-value service.
+    required: true
+  audience:
+    description: OIDC audience; defaults to the service-url origin.
+    default: ""
+  key:
+    description: Key within the namespace derived from the job's OIDC context.
+    required: true
+
+runs:
+  using: node24
+  main: main.cjs

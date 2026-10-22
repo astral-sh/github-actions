@@ -1,0 +1,33 @@
+name: Read a key-value entry
+description: Read workflow state from the current GitHub Actions OIDC namespace.
+
+inputs:
+  service-url:
+    description: HTTPS origin of the key-value service.
+    required: true
+  audience:
+    description: OIDC audience; defaults to the service-url origin.
+    default: ""
+  key:
+    description: Key within the namespace derived from the job's OIDC context.
+    required: true
+  path:
+    description: New output file for raw bytes. Must not already exist. Omit for a UTF-8 value output.
+    default: ""
+  mask-value:
+    description: Mask the text value in runner logs. Set false only for nonsensitive values.
+    default: "true"
+
+outputs:
+  found:
+    description: Whether an unexpired value was found (true or false).
+  value:
+    description: UTF-8 value when path is omitted; empty if absent or written to a file.
+  path:
+    description: Absolute output file path, or empty if no file was written.
+  expires-at:
+    description: Value expiry in Unix seconds, or empty if absent.
+
+runs:
+  using: node24
+  main: main.cjs

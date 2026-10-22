@@ -2,6 +2,8 @@
 
 Shared GitHub Actions for Astral projects.
 
+- [Key-value store](key-value-store/): share workflow state within a GitHub Actions
+  OIDC namespace.
 - [Rust workspace cache](rust-workspace-cache/): cache workspace crates and prune
   superseded artifacts before saving.
 - [Create release pull request](create-release-pr/): commit prepared release files
