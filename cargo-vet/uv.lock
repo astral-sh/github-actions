@@ -20,13 +20,39 @@ version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "astral-dev-toolchain-cargo-vet" },
+    { name = "rustup" },
     { name = "tomli-w" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "astral-dev-toolchain-cargo-vet", specifier = "==0.10.2" },
+    { name = "rustup", specifier = "==1.29.0.1" },
     { name = "tomli-w", specifier = ">=1,<2" },
+]
+
+[[package]]
+name = "rustup"
+version = "1.29.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0d/b9/6b5aa1a2b47203b287e4fe3ac64f974fa61a7f6cd3b375cf46f4fa565322/rustup-1.29.0.1.tar.gz", hash = "sha256:57942851dba8d044e571c0bd3c84321b1f094cc93f804ae4871cc5926dbb67f6", size = 7506, upload-time = "2026-03-17T10:53:58.484Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/a6/b49dff77f26ee302bbe53ce7fe5f4c2af0e8aa9ce9ac7d84b08eaa6be6c9/rustup-1.29.0.1-py3-none-linux_armv6l.whl", hash = "sha256:bfceadb1a24ae75bc33239a63813ace816c3f34638720f3ae671542226bfff5b", size = 6892139, upload-time = "2026-03-17T10:54:02.749Z" },
+    { url = "https://files.pythonhosted.org/packages/07/a7/099d0dc639d203a52d3a6618d8ed61a0285968c21c5cc70e93c8b8e7edad/rustup-1.29.0.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:5979fc7e85218f29971a068ec5f5aacf30abc15695473236a18de86d194ccb13", size = 5222570, upload-time = "2026-03-17T10:54:09.145Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/75/747734da050a9996a12d06eab6450de2bc6013b35b3b8ff22ebc98912d6a/rustup-1.29.0.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:5a16050206c0cfa77b1d11f32f3a6ae16490419c6640e198a2687ad2c9f29a9b", size = 4840596, upload-time = "2026-03-17T10:54:15.707Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/be/5f9baf18efec917c7cfdb8e6cd84eb12de6901ac541a2113b12407052acd/rustup-1.29.0.1-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:771b3a48cc598dfa559c243c5be4358c79c785401b62d6508e23456969fb7a8c", size = 8012113, upload-time = "2026-03-17T10:53:59.384Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/ee/25f8c9a19009f88cb7a232d8b0c3c9b73f80d217182546655454024fd671/rustup-1.29.0.1-py3-none-manylinux_2_17_armv7l.whl", hash = "sha256:cb619760d46bf1ee465e7eecd013d042acd4f2c811ee98a27f59060513443f2a", size = 6738198, upload-time = "2026-03-17T10:54:01.116Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/26/327b16aacd3d3bf6ccfe3a2e510c98731d1725840fc22d031c81226a011e/rustup-1.29.0.1-py3-none-manylinux_2_17_i686.whl", hash = "sha256:f82f0896af8fbcae0b3b970f4e3278ffd380c2cbf6bffb516700d398a9940a84", size = 7212528, upload-time = "2026-03-17T10:54:18.95Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/4f/d1c5eea02344cc217943436052d1ed479c5d41a846848375f8dbea6cdf1a/rustup-1.29.0.1-py3-none-manylinux_2_17_ppc64.whl", hash = "sha256:0b4d84bc43b760ade5ddb990cd97c414e6af95114ae4bbc6ba48aa04863e5d62", size = 7023644, upload-time = "2026-03-17T10:54:10.538Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/7f/f2bbdbfb5b07a6dd0bea4518030d71d80ce050976c5714bc8dbd7cd039b6/rustup-1.29.0.1-py3-none-manylinux_2_17_ppc64le.whl", hash = "sha256:6e60fc71e577be8efbafe76eadb0b6e53d576576584ef6f3c5bb491634231196", size = 6827119, upload-time = "2026-03-17T10:54:06.225Z" },
+    { url = "https://files.pythonhosted.org/packages/76/2d/bb2ef9ff185e04d6fa1283bf6a1e89de53b0c461dbe6591341b2b4b6aa68/rustup-1.29.0.1-py3-none-manylinux_2_17_s390x.whl", hash = "sha256:25d900b75e36cdbc943bba502873e4923b2e2ff2c1c3fbb870cac4c00cb085de", size = 7956104, upload-time = "2026-03-17T10:54:12.568Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/d9/3899985b90627335450656e0f9a4479616eac35c05475ff1317affe1948b/rustup-1.29.0.1-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:47c6d01a6b54b87308fe29ae91633757fb1c5862374e6dd8978955b411bff7e4", size = 7930749, upload-time = "2026-03-17T10:53:57.195Z" },
+    { url = "https://files.pythonhosted.org/packages/54/ea/8e9c4bc5fbc108de31f10602ad25d4a3184ee7d6a55e133e0a9d6914e126/rustup-1.29.0.1-py3-none-musllinux_1_1_aarch64.whl", hash = "sha256:b886fb084a0425aa10828f0df72c5863f820d57fa5d04f2a8fdea3990c71376c", size = 7860612, upload-time = "2026-03-17T10:54:22.441Z" },
+    { url = "https://files.pythonhosted.org/packages/48/b8/aa620a940599539759eb0ae5235460b30972bb57d9bfced5d432e6b6245c/rustup-1.29.0.1-py3-none-musllinux_1_1_ppc64le.whl", hash = "sha256:00e65afd78434fb7e8b8ee035a15b402f8844d1f033ed24f5b8a74ae0e17a075", size = 6635777, upload-time = "2026-03-17T10:54:14.279Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/3c/98e1f9b15aa03a1ec1aa89fb1f00c28aef29bab7b52c4af0c75b19d4bf6a/rustup-1.29.0.1-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:928367e4cdb690ca5bbfe7f35af7c0669bfa4391582f381762eba90d37ecbf55", size = 8097101, upload-time = "2026-03-17T10:54:20.628Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/27/ca07546c143cfa5d56c0268eff407c86281cfd309cd7b66a7b07c5034082/rustup-1.29.0.1-py3-none-win32.whl", hash = "sha256:8efa44fe6400ae60383f70b2793d5df76cc6d693bb866297b56f2afa37862737", size = 4557168, upload-time = "2026-03-17T10:54:07.638Z" },
+    { url = "https://files.pythonhosted.org/packages/80/9d/c0ce40103c7840340e5d7cba72372957bc3fd545c079b1f23dc0783bf7a3/rustup-1.29.0.1-py3-none-win_amd64.whl", hash = "sha256:366a1586699051c594a0c15ab87c4e56c9a7b87a3dce5d6d04c3b28182d7f66d", size = 5221719, upload-time = "2026-03-17T10:54:17.565Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/39/46c56d5fb34a2592750c5570203f054f457f62cf76adb3bd83f614a08ad8/rustup-1.29.0.1-py3-none-win_arm64.whl", hash = "sha256:577c7fa81847e31feb25d48aca79d67a2339e294addbb02e5294f5519fe6493f", size = 5015516, upload-time = "2026-03-17T10:54:04.357Z" },
 ]
 
 [[package]]

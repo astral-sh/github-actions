@@ -4,7 +4,7 @@ on:
       runner:
         description: "Linux x86-64 runner for Cargo Vet"
         type: string
-        default: ubuntu-latest
+        default: ubuntu-slim
       workspaces:
         description: "JSON array of Cargo workspace directories to vet"
         type: string

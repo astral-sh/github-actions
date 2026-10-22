@@ -25,6 +25,11 @@ runs:
       uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         version: ${{ inputs.uv-version }}
+    - name: "Set Rust toolchain profile"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: uv run --locked --project "$ACTION_PATH" rustup set profile minimal
     - name: "Get dependency audit token"
       id: token
       uses: astral-sh/github-actions/simple-token-service@eb81cf4d13127c3f9539f621c17e4c65327636c8
