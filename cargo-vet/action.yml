@@ -1,0 +1,75 @@
+name: "Run cargo-vet"
+description: "Audit a workspace with cargo-vet."
+
+inputs:
+  workspace:
+    description: "The workspace to audit."
+    required: true
+  workspaces:
+    description: "JSON array of first-party workspace directories."
+    required: true
+  uv-version:
+    description: "The uv version to install."
+    required: true
+  sts-api-url:
+    description: "The secure token service API URL."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: "Install uv"
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        version: ${{ inputs.uv-version }}
+    - name: "Get dependency audit token"
+      id: token
+      uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+      with:
+        exchange-url: ${{ inputs.sts-api-url }}/exchange
+        audience: ${{ inputs.sts-api-url }}
+        repository: astral-sh/dependency-reviews
+        permissions: |
+          actions: read
+    - name: "Find latest dependency audits and baseline"
+      id: audits
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+      run: |
+        run_id=$(gh run list \
+          --repo astral-sh/dependency-reviews \
+          --workflow export.yml \
+          --branch reviews \
+          --status success \
+          --limit 1 \
+          --json databaseId \
+          --jq '.[0].databaseId // empty')
+        if [ -z "$run_id" ]; then
+          echo "::error::No successful dependency audit export found."
+          exit 1
+        fi
+        echo "Using dependency-reviews run $run_id."
+        echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+    - name: "Download dependency audits and baseline"
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        github-token: ${{ steps.token.outputs.token }}
+        repository: astral-sh/dependency-reviews
+        run-id: ${{ steps.audits.outputs.run-id }}
+        name: cargo-vet-audits
+        path: ${{ runner.temp }}/cargo-vet
+    - name: "Vet dependencies"
+      shell: bash
+      working-directory: ${{ inputs.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        FIRST_PARTY_WORKSPACES: ${{ inputs.workspaces }}
+      run: |
+        test -f "$RUNNER_TEMP/cargo-vet/config.toml"
+        touch "$RUNNER_TEMP/cargo-vet/imports.lock"
+        uv run --locked --project "$ACTION_PATH" python "$ACTION_PATH/generate-policies.py" >> "$RUNNER_TEMP/cargo-vet/config.toml"
+        uv run --locked --project "$ACTION_PATH" cargo vet --store-path "$RUNNER_TEMP/cargo-vet"
