@@ -6,11 +6,10 @@ requests a fresh GitHub Actions OIDC token and exchanges it for a short-lived
 session with the configured service. No static secret or separate login step is
 required.
 
-The service derives the namespace from the signed OIDC context. Jobs and workflow
-runs for the same pull request and environment can share keys. Different pull
-requests receive separate namespaces, as do different repositories, events,
-refs, and environments. A branch push and a pull request do not share keys, even
-for the same commit. There is no input to select another namespace.
+The `scope` input requests a sharing boundary. The service authorizes
+that scope and its operations against repository policy, then derives the namespace
+from signed OIDC claims. Callers cannot supply another repository, PR, run, or job ID.
+Use the same scope when writing, reading, and deleting a value.
 
 ## Usage
 
@@ -18,6 +17,12 @@ Configure `KEY_VALUE_SERVICE_URL` as a repository variable containing the HTTPS
 origin of a compatible service, such as `https://kv.example.com`. Grant
 `id-token: write` to each job that uses these actions. Pin all three actions to
 the same full commit SHA.
+
+The following `.github/workflows/ci.yml` example uses the default `job` scope.
+The service's trusted policy must grant this workflow `read`, `write`,
+and `delete` for `job`. The service reads its configured policy
+path (default `.github/aghs-kv.json`) from the repository's `main`, independently
+of the job's checkout. Protect that branch and policy edits.
 
 ```yaml
 name: Workflow state
@@ -33,6 +38,7 @@ jobs:
       - uses: astral-sh/github-actions/key-value-store/put@<commit-sha>
         with:
           service-url: ${{ vars.KEY_VALUE_SERVICE_URL }}
+          scope: job
           key: build-sha
           value: ${{ github.sha }}
 
@@ -40,6 +46,7 @@ jobs:
         id: stored
         with:
           service-url: ${{ vars.KEY_VALUE_SERVICE_URL }}
+          scope: job
           key: build-sha
 
       - name: Compare the stored commit
@@ -51,7 +58,26 @@ jobs:
       - uses: astral-sh/github-actions/key-value-store/delete@<commit-sha>
         with:
           service-url: ${{ vars.KEY_VALUE_SERVICE_URL }}
+          scope: job
           key: build-sha
+```
+
+The corresponding policy grants access to each PR job's own namespace:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "on": ["pull_request"],
+      "caller_workflow": "ci.yml",
+      "caller_ref": "refs/pull/*/merge",
+      "permissions": {
+        "job": ["read", "write", "delete"]
+      }
+    }
+  ]
+}
 ```
 
 The actions run on Linux, macOS, and Windows with a runner that supports Node 24
@@ -67,6 +93,32 @@ All three actions accept these inputs:
 | `service-url` | Required | HTTPS origin, without credentials, a path, a query, or a fragment. |
 | `key` | Required | Case-sensitive key: 1–256 ASCII letters, digits, `.`, `_`, or `-`; cannot be `.` or `..`. |
 | `audience` | The `service-url` origin | Audience requested from GitHub. Must match the service configuration; at most 2,048 UTF-8 bytes without whitespace. |
+| `scope` | `job` | Requested sharing scope; the service must authorize it. See the scope table below. |
+
+All scopes are confined to the authenticated owner and repository.
+
+| Scope | Shared values |
+| --- | --- |
+| `pull-request` | The same PR and environment, across workflows and runs; requires a `pull_request` event |
+| `workflow` | The same event, ref, environment, and caller workflow file, across runs |
+| `run` | The same event, ref, environment, and workflow run, including retries |
+| `run-attempt` | The same event, ref, environment, and one attempt of a workflow run |
+| `job` | The same event, ref, environment, and one job execution |
+| `repository` | Authorized callers across events, refs, and environments in the repository |
+
+`run` requires a signed `run_id` claim. `run-attempt` additionally requires
+`run_attempt`, and `job` additionally requires `check_run_id`. Missing required
+claims fail the exchange.
+
+Scopes have separate namespaces: `repository` access does not unlock values in
+other scopes. Selecting `job` in an action does not revoke any broader grant
+that the service policy gives that caller. Policy controls which scopes and
+operations a job may request. All code within one job shares its job identity.
+
+These actions require a service that supports scoped exchanges. Every exchange
+sends the requested scope as JSON and requires the service to confirm it in the
+response. A denied or unsupported scope fails, as does a
+missing or mismatched confirmation. The actions never retry with another scope.
 
 `put` also accepts:
 
@@ -136,7 +188,7 @@ downloads, outside directories controlled by pull request contents.
 
 | Request | Authentication | Successful response |
 | --- | --- | --- |
-| `POST /exchange`, empty body | GitHub OIDC bearer token | JSON with `access_token`, `token_type: "Bearer"`, and `expires_at` in Unix seconds. |
+| `POST /exchange`, JSON `{"scope":"job"}` | GitHub OIDC bearer token | JSON with `access_token`, `token_type: "Bearer"`, `expires_at` in Unix seconds, and a matching `scope`. |
 | `PUT /kv/<key>`, raw bytes | Session bearer token | `204`. |
 | `GET /kv/<key>` | Session bearer token | `200` with raw bytes and `X-Expires-At` in Unix seconds, or `404`. |
 | `DELETE /kv/<key>` | Session bearer token | `204`, including for an absent key. |
@@ -155,13 +207,18 @@ enabled by default, redirects are rejected, and response bodies are bounded.
 OIDC and session tokens are masked before further requests, and error responses
 are not printed.
 
-Namespace isolation is enforced by the service. All actors, jobs, and workflows
-within the same accepted OIDC context share read, write, and delete access. This
-is not a secret store for mutually untrusted jobs in one pull request. The
-service supports `pull_request`, `push`, `workflow_dispatch`, and `schedule`
-contexts; it rejects `pull_request_target` and `workflow_run`. Adding an
-environment changes the namespace. Sessions are bearer credentials: anyone
-holding one can access its namespace until the session expires.
+Namespace isolation and operation permissions are enforced by the service using
+policy from trusted `main`.
+Jobs with grants to the same namespace can perform
+their permitted operations on each other's values. Use `job` scope and suitable
+policy grants to isolate job executions; this does not isolate steps within a
+job. The service supports `pull_request`, `push`, `workflow_dispatch`, and
+`schedule` contexts; it rejects `pull_request_target` and `workflow_run`.
+Adding an environment changes the namespace except for `repository` scope.
+Sessions are bearer credentials: anyone holding one can use its recorded
+permissions until expiry. The service caches repository policy
+for five minutes, so a removed grant may still authorize new sessions until the
+cached policy expires. Existing sessions retain their permissions until expiry.
 
 Treat retrieved values as untrusted data. Pass text through `env` and quote shell
 variables, as above, or consume downloaded files as data. Do not interpolate a

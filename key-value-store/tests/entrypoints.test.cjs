@@ -15,7 +15,7 @@ async function fixture(context) {
   context.after(() => fs.rm(directory, { recursive: true, force: true }));
   const values = new Map();
   const issued = new Set();
-  const sessions = new Set();
+  const sessions = new Map();
   const requests = [];
   const errors = [];
   let count = 0;
@@ -48,19 +48,25 @@ async function fixture(context) {
       const bearer = request.headers.authorization?.replace(/^Bearer /u, "");
       if (url.pathname === "/exchange") {
         assert.equal(request.method, "POST");
-        assert.equal(body.length, 0);
+        const exchange = JSON.parse(body.toString("utf8"));
+        assert.deepEqual(Object.keys(exchange), ["scope"]);
+        const { scope } = exchange;
+        assert.ok(["pull-request", "workflow", "run", "run-attempt", "job", "repository"].includes(scope));
+        assert.equal(request.headers["content-type"], "application/json");
+        requests.at(-1).scope = scope;
         assert.ok(issued.delete(bearer), "each exchange consumes a fresh OIDC token");
         const session = `aghs_kv_${count.toString(16).padStart(64, "0")}`;
-        sessions.add(session);
+        sessions.set(session, scope);
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify({
           access_token: session, token_type: "Bearer", expires_at: Math.floor(Date.now() / 1000) + 300,
+          scope,
         }));
         return;
       }
       assert.ok(url.pathname.startsWith("/kv/"), "requests stay on the expected endpoints");
       assert.ok(sessions.has(bearer), "value requests use the session credential");
-      const key = url.pathname.slice(4);
+      const key = `${sessions.get(bearer)}:${url.pathname.slice(4)}`;
       if (request.method === "PUT") {
         assert.equal(request.headers["content-type"], "application/octet-stream");
         values.set(key, body);
@@ -131,6 +137,24 @@ function succeeded(result) {
   assert.ok(result.stdout.split("\n").every((line) => !line || line.startsWith("::add-mask::")));
 }
 
+test("action entrypoints use the same requested scope for put, get, and delete", { timeout: 30_000 }, async (context) => {
+  const server = await fixture(context);
+  succeeded(await server.action("put", { INPUT_SCOPE: "workflow", INPUT_VALUE: "workflow value" }));
+  const otherScope = await server.action("get", { INPUT_SCOPE: "job" });
+  succeeded(otherScope);
+  assert.equal((await outputs(otherScope.output)).found, "false");
+  succeeded(await server.action("delete", { INPUT_SCOPE: "job" }));
+  const stored = await server.action("get", { INPUT_SCOPE: "workflow" });
+  succeeded(stored);
+  assert.equal((await outputs(stored.output)).value, "workflow value");
+  succeeded(await server.action("delete", { INPUT_SCOPE: "workflow" }));
+  const missing = await server.action("get", { INPUT_SCOPE: "workflow" });
+  succeeded(missing);
+  assert.equal((await outputs(missing.output)).found, "false");
+  assert.deepEqual(server.requests.filter((request) => request.path === "/exchange").map((request) => request.scope),
+    ["workflow", "job", "job", "workflow", "workflow", "workflow"]);
+});
+
 test("real HTTPS action entrypoints round-trip text, binary, empty and missing values", { timeout: 30_000 }, async (context) => {
   const server = await fixture(context);
   const text = " \nπ\r\n::error::stored text\n";
@@ -162,6 +186,7 @@ test("real HTTPS action entrypoints round-trip text, binary, empty and missing v
   succeeded(await server.action("delete"));
   assert.equal(server.requests.filter((request) => request.path === "/token").length, 9);
   assert.equal(server.requests.filter((request) => request.path === "/exchange").length, 9);
+  assert.ok(server.requests.filter((request) => request.path === "/exchange").every((request) => request.scope === "job"));
 });
 
 test("real HTTPS redirects never forward runner, OIDC or session credentials", { timeout: 30_000 }, async (context) => {
