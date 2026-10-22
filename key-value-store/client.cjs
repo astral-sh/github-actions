@@ -8,7 +8,7 @@ const path = require("node:path");
 const MAX_VALUE_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 32 * 1024;
 const REQUEST_TIMEOUT_MS = 15_000;
-const SCOPES = new Set(["context", "workflow", "run", "run-attempt", "job", "repository"]);
+const SCOPES = new Set(["pull-request", "workflow", "run", "run-attempt", "job", "repository"]);
 
 class ActionError extends Error {}
 
@@ -39,9 +39,9 @@ function optionsFromEnvironment(operation, env) {
   if (Buffer.byteLength(audience, "utf8") > 2048 || /\s/u.test(audience)) {
     throw new ActionError("audience must be at most 2048 UTF-8 bytes without whitespace");
   }
-  const scope = env.INPUT_SCOPE || "context";
+  const scope = env.INPUT_SCOPE || "job";
   if (!SCOPES.has(scope)) {
-    throw new ActionError("scope must be context, workflow, run, run-attempt, job, or repository");
+    throw new ActionError("scope must be pull-request, workflow, run, run-attempt, job, or repository");
   }
   const key = env.INPUT_KEY || "";
   if (key.length < 1 || key.length > 256 || /[^A-Za-z0-9._-]/u.test(key) || key === "." || key === "..") {
@@ -192,9 +192,9 @@ async function exchange(options, env, fetchImpl, write) {
     method: "POST",
     headers: {
       authorization: `Bearer ${oidc.value}`,
-      ...(options.scope !== "context" && { "content-type": "application/json" }),
+      "content-type": "application/json",
     },
-    ...(options.scope !== "context" && { body: JSON.stringify({ scope: options.scope }) }),
+    body: JSON.stringify({ scope: options.scope }),
   }, "token exchange");
   if (typeof session?.access_token !== "string" || session.access_token.length !== 72 || !/^aghs_kv_[0-9a-f]{64}$/u.test(session.access_token)) {
     throw new ActionError("exchange response did not contain a valid session token");
@@ -203,7 +203,7 @@ async function exchange(options, env, fetchImpl, write) {
   if (session.token_type !== "Bearer" || !Number.isSafeInteger(session.expires_at) || session.expires_at <= Math.floor(Date.now() / 1000)) {
     throw new ActionError("exchange response contained an invalid or expired session");
   }
-  if ((options.scope !== "context" || session.scope !== undefined) && session.scope !== options.scope) {
+  if (session.scope !== options.scope) {
     throw new ActionError("exchange response did not confirm the requested scope");
   }
   return session.access_token;

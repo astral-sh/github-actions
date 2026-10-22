@@ -20,7 +20,7 @@ function environment(overrides = {}) {
   };
 }
 
-function session(scope) {
+function session(scope = "job") {
   return new Response(JSON.stringify({
     access_token: token, token_type: "Bearer", expires_at: Math.floor(Date.now() / 1000) + 300,
     scope,
@@ -83,7 +83,8 @@ test("put exchanges a fresh OIDC token and preserves UTF-8 whitespace and empty 
     assert.equal(fixture.calls[0].headers.authorization, "Bearer runner-token");
     assert.equal(fixture.calls[1].url, "https://kv.example/exchange");
     assert.equal(fixture.calls[1].headers.authorization, `Bearer ${oidc}`);
-    assert.equal(fixture.calls[1].body, undefined);
+    assert.deepEqual(JSON.parse(fixture.calls[1].body), { scope: "job" });
+    assert.equal(fixture.calls[1].headers["content-type"], "application/json");
     assert.equal(fixture.calls[2].url, "https://kv.example/kv/build.result");
     assert.equal(fixture.calls[2].method, "PUT");
     assert.equal(fixture.calls[2].headers.authorization, `Bearer ${token}`);
@@ -115,7 +116,7 @@ test("invalid endpoints, namespace selectors, keys, and options fail before cred
     { INPUT_KEY: "key\n" }, { INPUT_KEY: "key?namespace=other" }, { INPUT_KEY: "a".repeat(257) },
     { INPUT_AUDIENCE: "has spaces" }, { INPUT_AUDIENCE: "🚀".repeat(513) },
     { INPUT_VALUE: "value", INPUT_PATH: "file" },
-    { INPUT_SCOPE: "Job" }, { INPUT_SCOPE: "job/other" }, { INPUT_SCOPE: " job" },
+    { INPUT_SCOPE: "Job" }, { INPUT_SCOPE: "job/other" }, { INPUT_SCOPE: " job" }, { INPUT_SCOPE: "context" },
   ]) {
     const fixture = mock(undefined, overrides);
     await assert.rejects(run("put", fixture.options));
@@ -124,7 +125,7 @@ test("invalid endpoints, namespace selectors, keys, and options fail before cred
 });
 
 test("scopes are requested during exchange and never become caller-selected namespace identifiers", async () => {
-  for (const scope of ["workflow", "run", "run-attempt", "job", "repository"]) {
+  for (const scope of ["pull-request", "workflow", "run", "run-attempt", "job", "repository"]) {
     const fixture = mock(new Response(null, { status: 204 }), { INPUT_SCOPE: scope });
     await run("delete", fixture.options);
     assert.deepEqual(JSON.parse(fixture.calls[1].body), { scope });
@@ -135,19 +136,24 @@ test("scopes are requested during exchange and never become caller-selected name
 });
 
 test("missing or mismatched scope confirmation never reaches the value API", async () => {
-  for (const [requested, confirmed] of [["job", undefined], ["job", "context"], ["job", "repository"], ["context", "job"]]) {
-    let calls = 0;
-    await assert.rejects(run("delete", {
-      env: environment({ INPUT_SCOPE: requested }), write: () => {},
-      fetchImpl: async () => ++calls === 1
-        ? new Response(JSON.stringify({ value: oidc }))
-        : session(confirmed),
-    }), /did not confirm the requested scope/);
-    assert.equal(calls, 2);
+  for (const requested of [undefined, "pull-request", "workflow", "run", "run-attempt", "job", "repository"]) {
+    for (const confirmed of [undefined, null, 0, [], {}, "context", "unknown", requested === "job" || requested === undefined ? "repository" : "job"]) {
+      let calls = 0;
+      await assert.rejects(run("delete", {
+        env: environment({ INPUT_SCOPE: requested }), write: () => {},
+        fetchImpl: async () => ++calls === 1
+          ? new Response(JSON.stringify({ value: oidc }))
+          : new Response(JSON.stringify({
+            access_token: token, token_type: "Bearer", expires_at: Math.floor(Date.now() / 1000) + 300,
+            scope: confirmed,
+          })),
+      }), /did not confirm the requested scope/);
+      assert.equal(calls, 2);
+    }
   }
 });
 
-test("a denied scope is never retried with context or another scope", async () => {
+test("a denied scope is never retried with another scope", async () => {
   const calls = [];
   await assert.rejects(run("put", {
     env: environment({ INPUT_SCOPE: "repository", INPUT_VALUE: "value" }), write: () => {},

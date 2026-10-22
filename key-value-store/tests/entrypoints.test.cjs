@@ -48,11 +48,11 @@ async function fixture(context) {
       const bearer = request.headers.authorization?.replace(/^Bearer /u, "");
       if (url.pathname === "/exchange") {
         assert.equal(request.method, "POST");
-        const exchange = body.length === 0 ? { scope: "context" } : JSON.parse(body.toString("utf8"));
+        const exchange = JSON.parse(body.toString("utf8"));
         assert.deepEqual(Object.keys(exchange), ["scope"]);
         const { scope } = exchange;
-        assert.ok(["context", "workflow", "run", "run-attempt", "job", "repository"].includes(scope));
-        if (body.length !== 0) assert.equal(request.headers["content-type"], "application/json");
+        assert.ok(["pull-request", "workflow", "run", "run-attempt", "job", "repository"].includes(scope));
+        assert.equal(request.headers["content-type"], "application/json");
         requests.at(-1).scope = scope;
         assert.ok(issued.delete(bearer), "each exchange consumes a fresh OIDC token");
         const session = `aghs_kv_${count.toString(16).padStart(64, "0")}`;
@@ -186,6 +186,7 @@ test("real HTTPS action entrypoints round-trip text, binary, empty and missing v
   succeeded(await server.action("delete"));
   assert.equal(server.requests.filter((request) => request.path === "/token").length, 9);
   assert.equal(server.requests.filter((request) => request.path === "/exchange").length, 9);
+  assert.ok(server.requests.filter((request) => request.path === "/exchange").every((request) => request.scope === "job"));
 });
 
 test("real HTTPS redirects never forward runner, OIDC or session credentials", { timeout: 30_000 }, async (context) => {
