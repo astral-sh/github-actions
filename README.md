@@ -6,6 +6,8 @@ Shared GitHub Actions for Astral projects.
   for scoped GitHub App installation tokens.
 - [Key-value store](key-value-store/): share workflow state within a GitHub Actions
   OIDC namespace.
+- [AI policy](ai-policy/): post the AI policy reminder and optionally close an
+  issue or pull request.
 - [Rust workspace cache](rust-workspace-cache/): cache workspace crates and prune
   superseded artifacts before saving.
 - [Create release pull request](create-release-pr/): commit prepared release files

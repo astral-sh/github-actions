@@ -1,0 +1,17 @@
+name: "Apply AI policy"
+description: "Post Astral's AI policy reminder and optionally close an issue or pull request."
+
+inputs:
+  token:
+    description: "GitHub token with issues: write and pull_requests: write permissions."
+    required: true
+  number:
+    description: "Issue or pull request number in the workflow repository."
+    required: true
+  label:
+    description: "The applied label: bot:ai-policy-comment or bot:ai-policy-close."
+    required: true
+
+runs:
+  using: node24
+  main: main.cjs
