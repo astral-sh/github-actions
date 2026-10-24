@@ -23,9 +23,6 @@ inputs:
   cache-bin:
     description: Cache binaries installed with Cargo.
     default: "true"
-  restore-build-script-mtimes:
-    description: Restore timestamps of matching tracked files in workspace packages with build scripts.
-    default: "false"
   save-if:
     description: Save the cache after a successful job when this is true.
     default: "true"
@@ -39,7 +36,6 @@ runs:
   using: composite
   steps:
     - name: Prepare build input cache
-      if: ${{ inputs.restore-build-script-mtimes == 'true' }}
       id: inputs
       uses: $/rust-workspace-cache/inputs/prepare
       with:
@@ -49,7 +45,7 @@ runs:
       id: cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        prefix-key: ${{ inputs.restore-build-script-mtimes == 'true' && format('{0}-build-inputs-v1', inputs.prefix-key) || inputs.prefix-key }}
+        prefix-key: ${{ inputs.prefix-key }}-build-inputs-v1
         key: ${{ inputs.key }}
         workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
         cache-workspace-crates: "true"
@@ -59,7 +55,6 @@ runs:
         save-if: ${{ inputs.save-if }}
 
     - name: Restore build input timestamps
-      if: ${{ inputs.restore-build-script-mtimes == 'true' }}
       uses: $/rust-workspace-cache/inputs
       with:
         workspace: ${{ inputs.workspace }}
