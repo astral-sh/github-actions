@@ -1,5 +1,12 @@
 name: Workspace cache smoke fixture
 description: Create a Cargo workspace and check its artifacts after the cache post steps.
+inputs:
+  cache-workspace-crates:
+    description: Whether workspace artifacts should remain cached.
+    default: "true"
+  phase:
+    description: Seed or restore the fixture cache.
+    default: seed
 outputs:
   workspace:
     description: Absolute path of the temporary Cargo workspace.

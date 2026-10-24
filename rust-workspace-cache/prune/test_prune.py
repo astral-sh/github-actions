@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from prune import prune_workspace_fingerprints
+from prune import prune_all_workspace_artifacts, prune_workspace_fingerprints
 
 OLD = 1_000_000_000
 MARKER = 2_000_000_000
@@ -83,6 +83,23 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
             (0, 0, 1),
         )
         self.assertTrue(unknown.is_dir())
+
+    def test_dependency_only_mode_removes_current_and_stale_workspace_artifacts(self):
+        old = self.fingerprint("example", "1111111111111111", OLD)
+        current = self.fingerprint("example", "2222222222222222", CURRENT)
+        dependency = self.fingerprint("dependency", "3333333333333333", OLD)
+        library = self.profile / "deps" / "libexample-2222222222222222.rlib"
+        library.touch()
+        dependency_library = (
+            self.profile / "deps" / "libdependency-3333333333333333.rlib"
+        )
+        dependency_library.touch()
+        self.assertEqual(prune_all_workspace_artifacts(self.profile, {"example"}), 3)
+        self.assertFalse(old.exists())
+        self.assertFalse(current.exists())
+        self.assertFalse(library.exists())
+        self.assertTrue(dependency.exists())
+        self.assertTrue(dependency_library.exists())
 
     @unittest.skipIf(sys.platform == "win32", "Creating symlinks requires privileges")
     def test_removes_stale_symlinks_without_removing_their_targets(self) -> None:

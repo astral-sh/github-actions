@@ -1,0 +1,14 @@
+name: Manage Cargo cache contents
+description: Restore installed Cargo binaries and prepare cache contents before upload.
+inputs:
+  configuration:
+    description: Prepared cache configuration.
+    required: true
+  save:
+    description: Whether a new cache entry will be saved.
+    required: true
+runs:
+  using: node24
+  main: main.cjs
+  post: post.cjs
+  post-if: success()

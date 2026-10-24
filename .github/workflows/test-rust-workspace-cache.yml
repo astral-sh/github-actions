@@ -12,15 +12,17 @@ permissions:
 
 env:
   RUSTC_BOOTSTRAP: "1"
+  RUSTUP_TOOLCHAIN: "1.99.0"
 
 jobs:
-  test:
+  seed:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        workspace-crates: ["true", "false"]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,32 +34,98 @@ jobs:
           version: "0.13.5"
           enable-cache: false
 
-      - name: Test pruning and lifecycle
+      - name: Install Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+
+      - name: Test cache helpers
         shell: bash
         run: |
-          python -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
-          python -m unittest discover -s rust-workspace-cache/inputs -p 'test_*.py'
-          node --test rust-workspace-cache/prune/lifecycle.test.cjs
-          node --test rust-workspace-cache/inputs/lifecycle.test.cjs
+          uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/cache -p 'test_*.py'
+          uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
+          uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/inputs -p 'test_*.py'
+          node --test rust-workspace-cache/prune/lifecycle.test.cjs rust-workspace-cache/inputs/lifecycle.test.cjs
 
-      # Register this first so its post step checks the result after the cache post steps.
+      # Register this first so its post step checks local artifacts after cleanup.
       - name: Create workspace fixture
         id: fixture
         uses: $/rust-workspace-cache/tests/smoke
+        with:
+          cache-workspace-crates: ${{ matrix.workspace-crates }}
+          phase: seed
 
       - name: Cache workspace
+        id: cache
         uses: $/rust-workspace-cache
         with:
           workspace: ${{ steps.fixture.outputs.workspace }}
           profile: |
             debug
             profiling
-          cache-bin: ${{ runner.os != 'macOS' }}
-          prefix-key: test-rust-workspace-cache
+          cache-workspace-crates: ${{ matrix.workspace-crates }}
+          add-job-id-key: "false"
+          prefix-key: test-native-rust-cache
           key: ${{ github.run_id }}-${{ github.run_attempt }}
+          save-if: "true"
 
       - name: Build workspace
-        working-directory: ${{ steps.fixture.outputs.workspace }}
-        run: |
-          cargo build --locked --offline -Z checksum-freshness
-          cargo build --locked --offline -Z checksum-freshness --profile profiling
+        run: node rust-workspace-cache/tests/smoke/build.cjs
+        env:
+          FIXTURE_WORKSPACE: ${{ steps.fixture.outputs.workspace }}
+          FIXTURE_MODE: ${{ matrix.workspace-crates }}
+          FIXTURE_PHASE: seed
+
+  restore:
+    needs: seed
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        workspace-crates: ["true", "false"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.13.5"
+          enable-cache: false
+
+      - name: Install Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+
+      # Register this first so its post step checks local artifacts after cleanup.
+      - name: Create workspace fixture
+        id: fixture
+        uses: $/rust-workspace-cache/tests/smoke
+        with:
+          cache-workspace-crates: ${{ matrix.workspace-crates }}
+          phase: restore
+
+      - name: Cache workspace
+        id: cache
+        uses: $/rust-workspace-cache
+        with:
+          workspace: ${{ steps.fixture.outputs.workspace }}
+          profile: |
+            debug
+            profiling
+          cache-workspace-crates: ${{ matrix.workspace-crates }}
+          add-job-id-key: "false"
+          prefix-key: test-native-rust-cache
+          key: ${{ github.run_id }}-${{ github.run_attempt }}
+          save-if: "false"
+
+      - name: Require an exact cache hit
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: exit 1
+
+      - name: Build workspace
+        run: node rust-workspace-cache/tests/smoke/build.cjs
+        env:
+          FIXTURE_WORKSPACE: ${{ steps.fixture.outputs.workspace }}
+          FIXTURE_MODE: ${{ matrix.workspace-crates }}
+          FIXTURE_PHASE: restore

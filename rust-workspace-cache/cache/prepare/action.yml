@@ -1,0 +1,42 @@
+name: Prepare Rust cache
+description: Key Cargo artifacts by the active compiler, build configuration, and dependencies.
+inputs:
+  workspace:
+    description: Cargo workspace directory.
+    required: true
+  target-directory:
+    description: Cargo target directory.
+    required: true
+  profile:
+    description: Build profile directories, separated by newlines.
+    required: true
+  prefix-key:
+    description: Cache key prefix.
+    required: true
+  key:
+    description: Additional cache key.
+    required: true
+  add-job-id-key:
+    description: Include the job ID in the cache key.
+    required: true
+  cache-bin:
+    description: Cache binaries installed with Cargo.
+    required: true
+  cache-workspace-crates:
+    description: Cache workspace artifacts as well as dependencies.
+    required: true
+  directory:
+    description: Build input snapshot directory.
+    required: true
+outputs:
+  key:
+    description: Primary cache key.
+  restore-key:
+    description: Compatible cache key prefix.
+  paths:
+    description: Cache paths.
+  configuration:
+    description: Prepared cache configuration.
+runs:
+  using: node24
+  main: main.cjs

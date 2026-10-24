@@ -97,17 +97,45 @@ def prune_workspace_fingerprints(
     return len(stale_fingerprints), removed_paths, len(active_fingerprints)
 
 
+def prune_all_workspace_artifacts(profile: Path, packages: set[str]) -> int:
+    fingerprint_root = profile / ".fingerprint"
+    if not fingerprint_root.is_dir():
+        return 0
+    fingerprints = set()
+    for directory in fingerprint_root.iterdir():
+        match = FINGERPRINT_DIRECTORY.fullmatch(directory.name)
+        if match and match.group("package") in packages:
+            fingerprints.add(match.group("fingerprint"))
+    removed = 0
+    for directory in (fingerprint_root, profile / "deps", profile / "build"):
+        if directory.is_dir():
+            for artifact in directory.iterdir():
+                match = ARTIFACT_FINGERPRINT.search(artifact.name)
+                if match and match.group(1) in fingerprints:
+                    if artifact.is_symlink() or artifact.is_file():
+                        artifact.unlink()
+                    elif artifact.is_dir():
+                        shutil.rmtree(artifact)
+                    removed += 1
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "profiles", type=Path, nargs="+", help="Cargo profile directories"
     )
     parser.add_argument("marker", type=Path, help="Marker created before the build")
+    parser.add_argument("--dependencies-only", action="store_true")
     args = parser.parse_args()
 
     marker_timestamp = args.marker.stat().st_mtime_ns
     packages = workspace_packages(Path.cwd())
     for profile in args.profiles:
+        if args.dependencies_only:
+            removed = prune_all_workspace_artifacts(profile, packages)
+            print(f"{profile}: Removed {removed} workspace artifact paths")
+            continue
         stale, removed, active = prune_workspace_fingerprints(
             profile, marker_timestamp, packages
         )
