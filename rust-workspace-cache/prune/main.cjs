@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const workspaceCrates = process.env["INPUT_CACHE-WORKSPACE-CRATES"] !== "false";
 const enabled = process.env.INPUT_ENABLED === "true";
 fs.appendFileSync(
   process.env.GITHUB_ENV,
-  `CARGO_UNSTABLE_MTIME_ON_USE=${enabled}\n`,
+  `CARGO_UNSTABLE_MTIME_ON_USE=${enabled && workspaceCrates}\n`,
 );
 
 if (enabled) {
@@ -24,6 +25,6 @@ if (enabled) {
   fs.writeFileSync(marker, "");
   fs.appendFileSync(
     process.env.GITHUB_STATE,
-    `cache=${JSON.stringify({ workspace, profiles, marker })}\n`,
+    `cache=${JSON.stringify({ workspace, profiles, marker, workspaceCrates, target: path.resolve(workspace, process.env["INPUT_TARGET-DIRECTORY"]) })}\n`,
   );
 }

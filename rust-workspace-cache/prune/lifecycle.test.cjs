@@ -101,8 +101,20 @@ function post(context, results, platform = process.platform) {
       {
         __dirname,
         process: child,
-        require: (name) =>
-          name === "node:child_process" ? childProcess : require(name),
+        require: (name) => {
+          if (name !== "../python.cjs") return require(name);
+          const module = { exports: {} };
+          vm.runInNewContext(
+            fs.readFileSync(path.join(__dirname, "../python.cjs"), "utf8"),
+            {
+              module,
+              process: child,
+              require: (name) =>
+                name === "node:child_process" ? childProcess : require(name),
+            },
+          );
+          return module.exports;
+        },
       },
     );
   } finally {
@@ -141,19 +153,24 @@ for (const [platform, python] of [
     const missing = Object.assign(new Error("uv is missing"), {
       code: "ENOENT",
     });
-    const result = post(context, [{ error: missing }, { status: 0 }], platform);
+    const result = post(
+      context,
+      [{ error: missing }, { status: 0 }, { status: 0 }],
+      platform,
+    );
     assert.equal(result.exitCode, 0);
     assert.deepEqual(
       result.calls.map((call) => call.command),
-      ["uv", python],
+      ["uv", python, python],
     );
-    assert.deepEqual(result.calls[1].args, [
+    assert.deepEqual(result.calls[2].args, [
       path.join(__dirname, "prune.py"),
       ...result.state.profiles,
       result.state.marker,
     ]);
-    assert.deepEqual(result.calls[1].options, {
+    assert.deepEqual(result.calls[2].options, {
       cwd: result.state.workspace,
+      env: undefined,
       stdio: "inherit",
     });
   });

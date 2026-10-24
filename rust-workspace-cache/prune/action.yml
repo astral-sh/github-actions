@@ -11,6 +11,9 @@ inputs:
   profile:
     description: Build profile directories within the target directory, separated by newlines.
     required: true
+  cache-workspace-crates:
+    description: Retain current workspace artifacts instead of removing all of them.
+    default: "true"
   enabled:
     description: Whether to track and prune artifacts.
     required: true

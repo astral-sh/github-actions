@@ -13,7 +13,7 @@ FINGERPRINT_DIRECTORY = re.compile(r"^(?P<package>.+)-(?P<fingerprint>[0-9a-f]{1
 ARTIFACT_FINGERPRINT = re.compile(r"-([0-9a-f]{16})(?:\.|$)")
 
 
-def workspace_packages(workspace: Path) -> set[str]:
+def workspace_members(workspace: Path) -> list[dict]:
     metadata = json.loads(
         subprocess.check_output(
             ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"],
@@ -22,9 +22,7 @@ def workspace_packages(workspace: Path) -> set[str]:
         )
     )
     members = set(metadata["workspace_members"])
-    return {
-        package["name"] for package in metadata["packages"] if package["id"] in members
-    }
+    return [package for package in metadata["packages"] if package["id"] in members]
 
 
 def fingerprint_last_used(directory: Path) -> int | None:
@@ -97,17 +95,85 @@ def prune_workspace_fingerprints(
     return len(stale_fingerprints), removed_paths, len(active_fingerprints)
 
 
+def prune_all_workspace_artifacts(
+    profile: Path, packages: set[str], targets: set[str]
+) -> int:
+    fingerprint_root = profile / ".fingerprint"
+    if not fingerprint_root.is_dir():
+        return 0
+    fingerprints = set()
+    for directory in fingerprint_root.iterdir():
+        match = FINGERPRINT_DIRECTORY.fullmatch(directory.name)
+        if match and match.group("package") in packages:
+            fingerprints.add(match.group("fingerprint"))
+    target_names = targets | {name.replace("-", "_") for name in targets}
+    unhashed_artifacts = {
+        prefix + name + suffix
+        for name in target_names
+        for prefix in ("", "lib")
+        for suffix in (
+            "",
+            ".a",
+            ".d",
+            ".dll",
+            ".dll.exp",
+            ".dll.lib",
+            ".dylib",
+            ".dSYM",
+            ".exe",
+            ".exp",
+            ".lib",
+            ".pdb",
+            ".rlib",
+            ".rmeta",
+            ".so",
+            ".wasm",
+        )
+    }
+    removed = 0
+    removed_unhashed = 0
+    for directory in (fingerprint_root, profile / "deps", profile / "build"):
+        if directory.is_dir():
+            for artifact in directory.iterdir():
+                match = ARTIFACT_FINGERPRINT.search(artifact.name)
+                # Some binary and library outputs have no fingerprint suffix.
+                unhashed = (
+                    directory == profile / "deps" and artifact.name in unhashed_artifacts
+                )
+                if (match and match.group(1) in fingerprints) or unhashed:
+                    if artifact.is_symlink() or artifact.is_file():
+                        artifact.unlink()
+                    elif artifact.is_dir():
+                        shutil.rmtree(artifact)
+                    removed += 1
+                    removed_unhashed += unhashed
+    if removed_unhashed:
+        print(f"{profile}: Removed {removed_unhashed} unhashed workspace artifact paths")
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "profiles", type=Path, nargs="+", help="Cargo profile directories"
     )
     parser.add_argument("marker", type=Path, help="Marker created before the build")
+    parser.add_argument("--dependencies-only", action="store_true")
     args = parser.parse_args()
 
     marker_timestamp = args.marker.stat().st_mtime_ns
-    packages = workspace_packages(Path.cwd())
+    members = workspace_members(Path.cwd())
+    packages = {package["name"] for package in members}
+    targets = {target["name"] for package in members for target in package["targets"]}
     for profile in args.profiles:
+        if args.dependencies_only:
+            removed = sum(
+                prune_all_workspace_artifacts(directory.parent, packages, targets)
+                for directory in profile.rglob(".fingerprint")
+                if directory.is_dir()
+            )
+            print(f"{profile}: Removed {removed} workspace artifact paths")
+            continue
         stale, removed, active = prune_workspace_fingerprints(
             profile, marker_timestamp, packages
         )
