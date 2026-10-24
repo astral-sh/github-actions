@@ -1,6 +1,6 @@
 # Rust workspace cache
 
-Cache Cargo dependencies and workspace artifacts with GitHub's cache service.
+Cache Cargo dependencies and workspace artifacts using the GitHub Actions cache API.
 Cache keys use the compiler selected in the workspace, so unrelated toolchains
 installed on the runner do not prevent sharing caches.
 
@@ -22,7 +22,7 @@ and `RUSTUP_TOOLCHAIN`. Build with that same toolchain after restoring the cache
 The helpers prefer `uv` from `PATH`, requesting Python 3.11 or newer without
 loading the caller's Python project or `uv` configuration. `uv` may download Python
 if needed; the action does not install `uv`. Without `uv`, the helpers
-looks for Python 3.11 or newer as `python3` on Linux and macOS, `python` on Windows,
+look for Python 3.11 or newer as `python3` on Linux and macOS, `python` on Windows,
 or in the runner's Python tool cache. A failure from
 `uv` fails the operation rather than retrying with Python. Keep Rust and the Python
 runtime available until the job ends. A current `Cargo.lock` is required.
@@ -114,7 +114,7 @@ The action records hashes, modes, and timestamps for Git-tracked regular files i
 workspace packages with build scripts, together with directory entry lists. After
 restoring artifacts, it restores matching file timestamps and eligible directory
 timestamps. Directories containing symlinks or entries outside the snapshot, and
-their ancestors, retain their checkout timestamps. Changed tracked inputs or
+their ancestors, retain their checkout timestamps. Changes to recorded files or
 directory entries within a current build-script package invalidate that package's
 cached build-script runs and outputs in the selected profiles.
 
