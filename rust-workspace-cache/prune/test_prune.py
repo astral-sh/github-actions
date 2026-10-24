@@ -94,12 +94,57 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
             self.profile / "deps" / "libdependency-3333333333333333.rlib"
         )
         dependency_library.touch()
-        self.assertEqual(prune_all_workspace_artifacts(self.profile, {"example"}), 3)
+        self.assertEqual(
+            prune_all_workspace_artifacts(self.profile, {"example"}, {"example"}), 3
+        )
         self.assertFalse(old.exists())
         self.assertFalse(current.exists())
         self.assertFalse(library.exists())
         self.assertTrue(dependency.exists())
         self.assertTrue(dependency_library.exists())
+
+    def test_dependency_only_mode_removes_unhashed_workspace_outputs(self):
+        self.fingerprint("example", "1111111111111111", CURRENT)
+        outputs = [
+            "example.exe",
+            "example.pdb",
+            "example.dll",
+            "example.dll.lib",
+            "example.dll.exp",
+            "libexample.rlib",
+            "libexample.so",
+            "example.wasm",
+        ]
+        for name in outputs:
+            (self.profile / "deps" / name).touch()
+        dependency = self.profile / "deps" / "dependency.pdb"
+        dependency.touch()
+        similarly_named = self.profile / "deps" / "example_helper.pdb"
+        similarly_named.touch()
+        self.assertEqual(
+            prune_all_workspace_artifacts(self.profile, {"example"}, {"example"}),
+            len(outputs) + 1,
+        )
+        self.assertTrue(
+            all(not (self.profile / "deps" / name).exists() for name in outputs)
+        )
+        self.assertTrue(dependency.is_file())
+        self.assertTrue(similarly_named.is_file())
+
+    def test_dependency_only_mode_uses_target_names_for_unhashed_outputs(self):
+        self.fingerprint("example-package", "1111111111111111", CURRENT)
+        outputs = ["custom-tool.exe", "custom_tool.pdb", "libcustom_library.rlib"]
+        for name in outputs:
+            (self.profile / "deps" / name).touch()
+        self.assertEqual(
+            prune_all_workspace_artifacts(
+                self.profile, {"example-package"}, {"custom-tool", "custom_library"}
+            ),
+            len(outputs) + 1,
+        )
+        self.assertTrue(
+            all(not (self.profile / "deps" / name).exists() for name in outputs)
+        )
 
     @unittest.skipIf(sys.platform == "win32", "Creating symlinks requires privileges")
     def test_removes_stale_symlinks_without_removing_their_targets(self) -> None:
