@@ -80,6 +80,76 @@ class CargoInputsTest(unittest.TestCase):
         self.assertEqual(result["invalidated_build_scripts"], 0)
         self.build("original", rebuilt=False)
 
+    def test_nested_workspace_restores_parent_dependency_inputs(self) -> None:
+        (self.root / "src/lib.rs").write_text(
+            'include!(concat!(env!("OUT_DIR"), "/generated.rs"));\n'
+            "pub fn value() -> &'static str { VALUE }\n"
+        )
+        other = self.root / "other"
+        (other / "src").mkdir(parents=True)
+        (other / "inputs").mkdir()
+        (other / "Cargo.toml").write_text(
+            '[package]\nname = "cache-input-fixture"\nversion = "0.2.0"\nedition = "2021"\n'
+        )
+        (other / "build.rs").write_text((self.root / "build.rs").read_text())
+        (other / "src/lib.rs").write_text((self.root / "src/lib.rs").read_text())
+        (other / "inputs/value.txt").write_text("second")
+        nested = self.root / "fuzz"
+        (nested / "src").mkdir(parents=True)
+        (nested / "Cargo.toml").write_text(
+            '[package]\nname = "nested-fixture"\nversion = "0.1.0"\nedition = "2021"\n'
+            '[dependencies]\ncache-input-fixture = { path = ".." }\n'
+            'other = { package = "cache-input-fixture", path = "../other" }\n'
+            '[workspace]\nmembers = ["."]\n'
+        )
+        (nested / "src/main.rs").write_text(
+            'fn main() { println!("{}+{}", cache_input_fixture::value(), other::value()); }\n'
+        )
+        subprocess.run(["git", "add", "."], cwd=self.root, check=True)
+
+        def build(expected: str, rebuilt: bool) -> None:
+            result = subprocess.run(
+                ["cargo", "run", "--offline", "-vv"],
+                cwd=nested,
+                env=self.environment,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(result.stdout.splitlines()[-1], expected, result.stderr)
+            self.assertEqual(
+                "Compiling cache-input-fixture" in result.stderr, rebuilt, result.stderr
+            )
+
+        build("original+second", True)
+        saved = inputs.scan(nested)
+        self.assertEqual(
+            saved["packages"],
+            {".": "cache-input-fixture", "other": "cache-input-fixture"},
+        )
+        os.utime(self.value, None)
+        os.utime(other / "inputs/value.txt", None)
+        result = inputs.restore(nested, saved, [self.root / "target/debug"])
+        self.assertGreater(result["restored_files"], 0)
+        self.assertEqual(result["invalidated_build_scripts"], 0)
+        build("original+second", False)
+
+        old = self.value.stat().st_mtime_ns
+        self.value.write_text("changed")
+        os.utime(self.value, ns=(old, old))
+        result = inputs.restore(nested, saved, [self.root / "target/debug"])
+        self.assertGreater(result["invalidated_build_scripts"], 0)
+        build("changed+second", True)
+
+    def test_v1_manifest_is_restored(self) -> None:
+        self.saved["version"] = 1
+        self.saved["packages"] = {
+            name: directory for directory, name in self.saved["packages"].items()
+        }
+        os.utime(self.value, None)
+        self.assertGreater(self.restore()["restored_files"], 0)
+        self.build("original", rebuilt=False)
+
     def test_changed_bytes_with_preserved_timestamp_rebuild(self) -> None:
         old = self.value.stat().st_mtime_ns
         self.value.write_text("changed")

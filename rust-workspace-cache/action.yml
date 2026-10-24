@@ -43,6 +43,7 @@ runs:
       uses: $/rust-workspace-cache/inputs/prepare
       with:
         workspace: ${{ inputs.workspace }}
+        cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
 
     - name: Prepare Rust cache
       id: configuration

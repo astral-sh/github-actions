@@ -13,10 +13,11 @@ function fixture(context) {
   context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const workspace = path.join(directory, "workspace with spaces");
   fs.mkdirSync(workspace);
+  assert.equal(spawnSync("git", ["init", "--quiet", workspace]).status, 0);
   return { directory, workspace };
 }
 
-function prepare(directory, workspace, job = "1") {
+function prepare(directory, workspace, job = "1", workspaceCrates = true) {
   const output = path.join(directory, "output");
   fs.writeFileSync(output, "");
   const result = spawnSync(
@@ -26,6 +27,7 @@ function prepare(directory, workspace, job = "1") {
       env: {
         ...process.env,
         INPUT_WORKSPACE: workspace,
+        "INPUT_CACHE-WORKSPACE-CRATES": String(workspaceCrates),
         RUNNER_TEMP: directory,
         GITHUB_OUTPUT: output,
         GITHUB_RUN_ID: job,
@@ -66,7 +68,20 @@ test("rejects overlapping snapshots but permits independent workspaces", (contex
   assert.notEqual(prepare(directory, workspace).status, 0);
   const adjacent = `${workspace}-other`;
   fs.mkdirSync(adjacent);
+  assert.equal(spawnSync("git", ["init", "--quiet", adjacent]).status, 0);
   assert.equal(prepare(directory, adjacent).status, 0);
+});
+
+test("rejects input timestamp restoration for separate workspaces in the same checkout", (context) => {
+  const { directory, workspace } = fixture(context);
+  const first = path.join(workspace, "first");
+  const second = path.join(workspace, "second");
+  fs.mkdirSync(first);
+  fs.mkdirSync(second);
+  assert.equal(prepare(directory, first).status, 0);
+  assert.notEqual(prepare(directory, second).status, 0);
+  assert.equal(prepare(directory, first, "2", false).status, 0);
+  assert.equal(prepare(directory, second, "2", false).status, 0);
 });
 
 function lifecycle(context, save, status = 0) {

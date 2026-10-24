@@ -16,21 +16,54 @@ from pathlib import Path
 FINGERPRINT = re.compile(r"^(?P<package>.+)-[0-9a-f]{16}$")
 
 
-def build_script_packages(root: Path) -> dict[str, str]:
-    metadata = json.loads(
+def checkout_root(workspace: Path) -> Path:
+    return Path(
         subprocess.check_output(
-            ["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"],
-            cwd=root,
+            ["git", "rev-parse", "--show-toplevel"], cwd=workspace, text=True
+        ).strip()
+    ).resolve()
+
+
+def build_script_packages(workspace: Path, root: Path) -> dict[str, str]:
+    def metadata(manifest: Path) -> dict[Path, dict]:
+        result = json.loads(
+            subprocess.check_output(
+                [
+                    "cargo",
+                    "metadata",
+                    "--no-deps",
+                    "--format-version",
+                    "1",
+                    "--locked",
+                    "--manifest-path",
+                    str(manifest),
+                ],
+                cwd=workspace,
+            )
         )
-    )
-    members = set(metadata["workspace_members"])
-    return {
-        package["name"]: str(Path(package["manifest_path"]).parent.relative_to(root))
-        for package in metadata["packages"]
-        if package["id"] in members
-        and any("custom-build" in target["kind"] for target in package["targets"])
-        and Path(package["manifest_path"]).is_relative_to(root)
-    }
+        return {
+            Path(package["manifest_path"]).resolve(): package
+            for package in result["packages"]
+        }
+
+    known = metadata(workspace / "Cargo.toml")
+    pending = list(known)
+    visited = set()
+    packages = {}
+    while pending:
+        manifest = pending.pop().resolve()
+        if manifest in visited or not manifest.is_relative_to(root):
+            continue
+        visited.add(manifest)
+        if manifest not in known:
+            known.update(metadata(manifest))
+        package = known[manifest]
+        if any("custom-build" in target["kind"] for target in package["targets"]):
+            packages[str(manifest.parent.relative_to(root))] = package["name"]
+        for dependency in package["dependencies"]:
+            if dependency.get("path"):
+                pending.append(Path(dependency["path"]) / "Cargo.toml")
+    return packages
 
 
 def safe_path(root: Path, name: str) -> Path | None:
@@ -54,12 +87,11 @@ def directory_entries(path: Path) -> list[list[str | int]]:
     )
 
 
-def scan(root: Path) -> dict:
-    packages = build_script_packages(root)
+def scan(workspace: Path) -> dict:
+    root = checkout_root(workspace)
+    packages = build_script_packages(workspace, root)
     output = (
-        subprocess.check_output(
-            ["git", "ls-files", "-z", "--", *packages.values()], cwd=root
-        )
+        subprocess.check_output(["git", "ls-files", "-z", "--", *packages], cwd=root)
         if packages
         else b""
     )
@@ -78,7 +110,7 @@ def scan(root: Path) -> dict:
                 break
             directories.add(parent)
     return {
-        "version": 1,
+        "version": 2,
         "packages": packages,
         "files": files,
         "directories": {
@@ -131,10 +163,30 @@ def invalidate_build_scripts(profiles: list[Path], packages: set[str]) -> int:
     return removed
 
 
-def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
-    if saved["version"] != 1:
+def restore(workspace: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
+    root = checkout_root(workspace)
+    if saved["version"] == 1:
+        prefix = workspace.relative_to(root)
+        saved = saved | {
+            "packages": {
+                str(prefix / directory): package
+                for package, directory in saved["packages"].items()
+            },
+            **{
+                group: {
+                    (
+                        (prefix / name).as_posix()
+                        if group == "files"
+                        else str(prefix / name)
+                    ): record
+                    for name, record in saved[group].items()
+                }
+                for group in ("files", "directories")
+            },
+        }
+    elif saved["version"] != 2:
         raise ValueError("Unsupported input timestamp manifest")
-    current = scan(root)
+    current = scan(workspace)
     safe_directories = restorable_directories(current)
     changed_paths = set()
     matching = {"files": [], "directories": []}
@@ -149,7 +201,7 @@ def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
                 changed_paths.add(name)
     changed_packages = {
         package
-        for package, directory in current["packages"].items()
+        for directory, package in current["packages"].items()
         if any(Path(name).is_relative_to(directory) for name in changed_paths)
     }
     # Changed tracked inputs or directory listings must rerun their build scripts
