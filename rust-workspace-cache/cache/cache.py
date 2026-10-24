@@ -296,9 +296,13 @@ def clean(configuration: dict) -> None:
         for package in packages
         if package.get("source", "").startswith("registry+")
     }
-    # Keep extracted sources as well as archives: build scripts can depend on source mtimes.
+    # Workspace caches retain extracted registry sources because build scripts can
+    # depend on their mtimes.
     for kind in ("cache", "src"):
         directory = cargo_home / "registry" / kind
+        if kind == "src" and not configuration["workspace_crates"]:
+            remove(directory)
+            continue
         if directory.is_dir():
             for registry in directory.iterdir():
                 if registry.is_dir() and not registry.is_symlink():

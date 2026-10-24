@@ -118,6 +118,7 @@ class CacheContentsTest(unittest.TestCase):
         )
         self.configuration = {
             "cargo_home": str(self.home),
+            "workspace_crates": True,
             "binaries": str(self.stage),
             "cache_bin": True,
             "initial_bins": ["rustc", "preinstalled"],
@@ -185,6 +186,18 @@ class CacheContentsTest(unittest.TestCase):
         self.assertEqual(
             {path.name for path in profile.iterdir()}, {"deps", "build", ".fingerprint"}
         )
+
+    def test_dependency_only_cleanup_keeps_archives_without_extracted_sources(self):
+        self.configuration["workspace_crates"] = False
+        source = self.home / "registry/src/example/dep-1.0.0"
+        source.mkdir(parents=True)
+        (source / "Cargo.toml").write_text("source")
+        archive = self.home / "registry/cache/example/dep-1.0.0.crate"
+        archive.parent.mkdir(parents=True)
+        archive.write_text("archive")
+        clean(self.configuration)
+        self.assertFalse((self.home / "registry/src").exists())
+        self.assertEqual(archive.read_text(), "archive")
 
     def test_cleanup_keeps_host_cross_and_nested_package_profiles(self):
         target = Path(self.configuration["target"])
