@@ -133,7 +133,11 @@ def main() -> None:
     packages = workspace_packages(Path.cwd())
     for profile in args.profiles:
         if args.dependencies_only:
-            removed = prune_all_workspace_artifacts(profile, packages)
+            removed = sum(
+                prune_all_workspace_artifacts(directory.parent, packages)
+                for directory in profile.rglob(".fingerprint")
+                if directory.is_dir()
+            )
             print(f"{profile}: Removed {removed} workspace artifact paths")
             continue
         stale, removed, active = prune_workspace_fingerprints(

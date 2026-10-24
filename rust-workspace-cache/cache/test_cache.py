@@ -186,6 +186,30 @@ class CacheContentsTest(unittest.TestCase):
             {path.name for path in profile.iterdir()}, {"deps", "build", ".fingerprint"}
         )
 
+    def test_cleanup_keeps_host_cross_and_nested_package_profiles(self):
+        target = Path(self.configuration["target"])
+        profiles = [
+            target / "debug",
+            target / "wasm32-unknown-unknown/debug",
+            target / "package/example/target/debug",
+        ]
+        for profile in profiles:
+            (profile / ".fingerprint").mkdir(parents=True)
+            (profile / "deps").mkdir()
+            (profile / "deps/libdependency.rlib").write_text("compiled dependency")
+            (profile / "incremental").mkdir()
+            (profile / "binary").write_text("top-level output")
+        (target / "doc").mkdir()
+        (target / "doc/index.html").write_text("documentation")
+        clean(self.configuration)
+        for profile in profiles:
+            self.assertEqual(
+                (profile / "deps/libdependency.rlib").read_text(), "compiled dependency"
+            )
+            self.assertFalse((profile / "incremental").exists())
+            self.assertFalse((profile / "binary").exists())
+        self.assertFalse((target / "doc").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

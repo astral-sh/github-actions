@@ -182,7 +182,7 @@ def prepare(configuration_path: Path) -> None:
     paths = [
         str(cargo_home / "registry"),
         str(cargo_home / "git"),
-        *[str(target / profile) for profile in profiles],
+        str(target),
     ]
     if configuration["cache_bin"]:
         paths.append(str(stage))
@@ -311,12 +311,28 @@ def clean(configuration: dict) -> None:
                         if name not in registry_packages:
                             remove(package)
     target = Path(configuration["target"])
-    for profile_name in configuration["profiles"]:
-        profile = target / profile_name
-        if profile.is_dir():
-            for artifact in profile.iterdir():
-                if artifact.name not in {".fingerprint", "deps", "build"}:
+    profiles = {path.parent for path in target.rglob(".fingerprint") if path.is_dir()}
+    ancestors = {
+        parent
+        for profile in profiles
+        for parent in profile.parents
+        if parent.is_relative_to(target)
+    }
+
+    def clean_target(directory: Path) -> None:
+        if directory in profiles:
+            keep = {".fingerprint", "deps", "build"}
+            for artifact in directory.iterdir():
+                if artifact.name not in keep:
                     remove(artifact)
+        elif directory.is_dir():
+            for artifact in directory.iterdir():
+                if not artifact.is_symlink() and artifact in profiles | ancestors:
+                    clean_target(artifact)
+                elif artifact.name not in {".rustc_info.json", "CACHEDIR.TAG"}:
+                    remove(artifact)
+
+    clean_target(target)
     stage_binaries(configuration)
 
 

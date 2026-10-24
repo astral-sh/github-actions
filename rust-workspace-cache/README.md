@@ -45,19 +45,21 @@ The two modes use separate cache keys.
 
 ## Inputs
 
-| Input                    | Default             | Description                                                      |
-| ------------------------ | ------------------- | ---------------------------------------------------------------- |
-| `workspace`              | `.`                 | Cargo workspace directory, relative to the checkout or absolute. |
-| `target-directory`       | `target`            | Cargo target directory, relative to `workspace`.                 |
-| `profile`                | `debug`             | Profile directories to cache, separated by newlines.             |
-| `prefix-key`             | `v1-rust-workspace` | Cache key prefix; change it to invalidate caches.                |
-| `key`                    | Empty               | Additional cache key.                                            |
-| `add-job-id-key`         | `true`              | Include the job ID; set to `false` to share caches between jobs. |
-| `cache-workspace-crates` | `true`              | Cache workspace artifacts as well as dependencies.               |
-| `cache-bin`              | `true`              | Cache binaries installed with Cargo after this action starts.    |
-| `save-if`                | `true`              | Save a new cache after a successful job.                         |
+| Input                    | Default             | Description                                                            |
+| ------------------------ | ------------------- | ---------------------------------------------------------------------- |
+| `workspace`              | `.`                 | Cargo workspace directory, relative to the checkout or absolute.       |
+| `target-directory`       | `target`            | Cargo target directory, relative to `workspace`.                       |
+| `profile`                | `debug`             | Profile directories to prune in workspace mode, separated by newlines. |
+| `prefix-key`             | `v1-rust-workspace` | Cache key prefix; change it to invalidate caches.                      |
+| `key`                    | Empty               | Additional cache key.                                                  |
+| `add-job-id-key`         | `true`              | Include the job ID; set to `false` to share caches between jobs.       |
+| `cache-workspace-crates` | `true`              | Cache workspace artifacts as well as dependencies.                     |
+| `cache-bin`              | `true`              | Cache binaries installed with Cargo after this action starts.          |
+| `save-if`                | `true`              | Save a new cache after a successful job.                               |
 
-The build must use the configured workspace, target directory, and profiles.
+The build must use the configured workspace and target directory. In workspace
+mode, `profile` selects the directories to prune; dependency-only mode removes
+workspace artifacts from every profile in the target directory.
 Profiles can include a target triple, such as `x86_64-unknown-linux-gnu/debug`.
 For jobs that build multiple profiles:
 
@@ -75,7 +77,7 @@ restores are rejected.
 
 ## Cache contents and keys
 
-The action caches the selected profiles, Cargo's registry and Git dependencies,
+The action caches the target directory, Cargo's registry and Git dependencies,
 and optionally Cargo-installed binaries. It removes incremental artifacts and
 top-level build outputs before upload. Dependency sources remain cached
 because build scripts can depend on their timestamps. Runner-provided binaries

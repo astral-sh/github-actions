@@ -3,12 +3,15 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 if (process.env.STATE_cache) {
-  const { workspace, profiles, marker, workspaceCrates } = JSON.parse(
+  const { workspace, profiles, marker, workspaceCrates, target } = JSON.parse(
     process.env.STATE_cache,
   );
   try {
     const args = [path.join(__dirname, "prune.py"), ...profiles, marker];
-    if (workspaceCrates === false) args.push("--dependencies-only");
+    if (workspaceCrates === false) {
+      args.splice(1, profiles.length, target);
+      args.push("--dependencies-only");
+    }
     const options = { cwd: workspace, stdio: "inherit" };
     let result = spawnSync(
       "uv",

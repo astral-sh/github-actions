@@ -25,6 +25,6 @@ if (enabled) {
   fs.writeFileSync(marker, "");
   fs.appendFileSync(
     process.env.GITHUB_STATE,
-    `cache=${JSON.stringify({ workspace, profiles, marker, workspaceCrates })}\n`,
+    `cache=${JSON.stringify({ workspace, profiles, marker, workspaceCrates, target: path.resolve(workspace, process.env["INPUT_TARGET-DIRECTORY"]) })}\n`,
   );
 }
