@@ -21,8 +21,9 @@ and `RUSTUP_TOOLCHAIN`. Build with that same toolchain after restoring the cache
 
 The helpers prefer `uv` from `PATH`, requesting Python 3.11 or newer without
 loading the caller's Python project or `uv` configuration. `uv` may download Python
-if needed; the action does not install `uv`. Without `uv`, Python 3.11 or newer must
-be available as `python3` on Linux and macOS, or `python` on Windows. A failure from
+if needed; the action does not install `uv`. Without `uv`, the helpers
+looks for Python 3.11 or newer as `python3` on Linux and macOS, `python` on Windows,
+or in the runner's Python tool cache. A failure from
 `uv` fails the operation rather than retrying with Python. Keep Rust and the Python
 runtime available until the job ends. A current `Cargo.lock` is required.
 

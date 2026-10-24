@@ -43,7 +43,7 @@ jobs:
           uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/cache -p 'test_*.py'
           uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
           uv run --no-project --python '>=3.11' -m unittest discover -s rust-workspace-cache/inputs -p 'test_*.py'
-          node --test rust-workspace-cache/prune/lifecycle.test.cjs rust-workspace-cache/inputs/lifecycle.test.cjs
+          node --test rust-workspace-cache/python.test.cjs rust-workspace-cache/prune/lifecycle.test.cjs rust-workspace-cache/inputs/lifecycle.test.cjs
 
       # Register this first so its post step checks local artifacts after cleanup.
       - name: Create workspace fixture
