@@ -6,6 +6,10 @@ inputs:
     description: Cargo workspace directory.
     required: true
 
+  cache-workspace-crates:
+    description: Whether this cache restores build input timestamps.
+    default: "true"
+
 outputs:
   directory:
     description: Directory to cache alongside the Cargo artifacts.

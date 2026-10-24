@@ -73,7 +73,8 @@ For jobs that build multiple profiles:
 ```
 
 An absolute `workspace` supports builds outside the checkout, including Windows
-Dev Drives. Restore only one artifact cache per workspace; overlapping workspace
+Dev Drives. Restore only one workspace cache per Git checkout, since path
+dependencies can share build inputs across Cargo workspaces. Overlapping workspace
 restores are rejected.
 
 ## Cache contents and keys
@@ -114,8 +115,11 @@ caches.
 
 Cargo's `checksum-freshness` does not replace every build-script timestamp check.
 The action records hashes, modes, and timestamps for Git-tracked regular files in
-workspace packages with build scripts, together with directory entry lists. After
-restoring artifacts, it restores matching file timestamps and eligible directory
+workspace packages and local path dependencies with build scripts, together with
+directory entry lists. Local path dependencies are included when they are inside
+the same Git checkout, including outside a nested Cargo workspace. Discovery uses
+`cargo metadata --no-deps` and does not download registry sources. After restoring
+artifacts, it restores matching file timestamps and eligible directory
 timestamps. Directories containing symlinks or entries outside the snapshot, and
 their ancestors, retain their checkout timestamps. Changes to recorded files or
 directory entries within a current build-script package invalidate that package's

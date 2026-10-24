@@ -1,8 +1,18 @@
+const { execFileSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const workspace = fs.realpathSync(process.env.INPUT_WORKSPACE);
+const inputRoot =
+  process.env["INPUT_CACHE-WORKSPACE-CRATES"] === "false"
+    ? null
+    : fs.realpathSync(
+        execFileSync("git", ["rev-parse", "--show-toplevel"], {
+          cwd: workspace,
+          encoding: "utf8",
+        }).trim(),
+      );
 const job = [
   process.env.GITHUB_RUN_ID,
   process.env.GITHUB_RUN_ATTEMPT,
@@ -25,15 +35,23 @@ function contains(parent, child) {
   );
 }
 if (
-  workspaces.some(
-    (other) => contains(other, workspace) || contains(workspace, other),
-  )
+  workspaces.some((entry) => {
+    const other = typeof entry === "string" ? { workspace: entry } : entry;
+    return (
+      contains(other.workspace, workspace) ||
+      contains(workspace, other.workspace) ||
+      (inputRoot &&
+        other.inputRoot &&
+        (contains(inputRoot, other.inputRoot) ||
+          contains(other.inputRoot, inputRoot)))
+    );
+  })
 ) {
   throw new Error(
-    "Build input timestamps can only be restored once per workspace in a job",
+    "Rust cache workspaces must not overlap, and only one cache may restore input timestamps per Git checkout.",
   );
 }
-workspaces.push(workspace);
+workspaces.push({ workspace, inputRoot });
 fs.writeFileSync(registry, JSON.stringify(workspaces));
 
 const id = crypto

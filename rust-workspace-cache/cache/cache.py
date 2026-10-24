@@ -85,6 +85,8 @@ def cache_keys(
         "workspace_crates": configuration["workspace_crates"],
         "binaries": configuration["cache_bin"],
     }
+    if configuration["workspace_crates"]:
+        scope["input_schema"] = 2
     dependencies = {
         "manifests": manifests,
         "packages": [
