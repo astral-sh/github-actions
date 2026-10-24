@@ -79,11 +79,16 @@ test("an older default Python falls back to the runner tool cache", () => {
     ["3.10.12", "3.11.14", "3.13.1", "invalid"],
   );
   assert.equal(run(["cache.py", "prepare", "configuration"]), 0);
-  assert.equal(calls[2].command, "/tools/Python/3.13.1/arm64/bin/python3");
+  assert.equal(
+    calls[2].command,
+    path.join("/tools", "Python", "3.13.1", "arm64", "bin", "python3"),
+  );
   assert.equal(calls[3].command, calls[2].command);
   assert.equal(
     calls[3].options.env.LD_LIBRARY_PATH,
-    "/tools/Python/3.13.1/arm64/lib:/existing",
+    [path.join("/tools", "Python", "3.13.1", "arm64", "lib"), "/existing"].join(
+      path.delimiter,
+    ),
   );
 });
 
