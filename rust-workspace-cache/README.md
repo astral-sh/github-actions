@@ -16,15 +16,16 @@ by the build. Pruning leaves dependencies and unused workspace packages untouche
     RUSTC_BOOTSTRAP: "1"
 ```
 
-Install Rust before this action. Pruning uses `uv` from `PATH` when available,
-requesting Python 3.11 or newer without discovering the caller's Python project or
-`uv` configuration files. `uv` may download Python if no compatible interpreter is
-available. The action does not install `uv`.
+Install Rust and Git before this action. Timestamp restoration and pruning use
+`uv` from `PATH` when available, requesting Python 3.11 or newer without discovering
+the caller's Python project or `uv` configuration files. `uv` may download Python
+if no compatible interpreter is available. The action does not install `uv`.
 
 If `uv` is not found, Python 3.11 or newer must be available as `python3` on
-Linux and macOS, or `python` on Windows, when the job ends. Pruning also requires
-`cargo` and a current `Cargo.lock` in the workspace at that point. A failure from
-`uv` fails pruning; it does not retry with Python.
+Linux and macOS, or `python` on Windows. Restoring an input snapshot and saving or
+pruning a cache require `cargo` and a current `Cargo.lock`. Keep Rust and the Python
+runtime available until the job ends. A failure from `uv` fails the operation; it
+does not retry with Python.
 
 The action sets `CARGO_UNSTABLE_MTIME_ON_USE` to `true` for subsequent steps when
 `save-if` is `true` and no exact cache match was restored; otherwise it sets the
@@ -69,6 +70,31 @@ With `add-job-id-key: "false"`, jobs can share entries when the remaining cache 
 components and GitHub cache scope also match.
 
 The `cache-hit` output reports whether an exact cache match was restored.
+
+## Build-script input timestamps
+
+Cargo's `checksum-freshness` does not replace every build-script timestamp check.
+Fresh checkout timestamps can therefore invalidate cached workspace builds even
+when their source files are unchanged. The action caches hashes, modes, and
+timestamps for Git-tracked regular files in workspace packages with build scripts,
+together with their directory entry lists. After restoring artifacts, it restores
+timestamps for matching files and for directories whose entry lists match and
+whose contents consist only of tracked regular files in the snapshot and
+directories containing them. It leaves the timestamps of directories containing
+symlinks or entries outside the snapshot, and their ancestors, unchanged. Changes to
+tracked inputs or directory entries within a current build-script package
+invalidate that package's cached runs and their output directories in the selected
+profiles.
+
+The action does not compare the contents of Git metadata, symlinks, untracked
+files, or inputs outside these packages; Cargo's usual freshness rules still apply.
+Enable `checksum-freshness` for Rust source reuse across fresh checkouts. Restore
+one artifact cache per workspace; overlapping workspace restores are rejected.
+
+The action adds `-build-inputs-v1` to `prefix-key` and caches the input metadata
+alongside the Cargo artifacts. The cache entry is populated when saving is enabled
+and the job succeeds. Metadata is recorded only when a new artifact cache will be
+saved; exact hits and read-only jobs restore the snapshot when available.
 
 ## Windows workspaces
 

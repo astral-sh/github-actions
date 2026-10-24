@@ -36,7 +36,9 @@ jobs:
         shell: bash
         run: |
           python -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
+          python -m unittest discover -s rust-workspace-cache/inputs -p 'test_*.py'
           node --test rust-workspace-cache/prune/lifecycle.test.cjs
+          node --test rust-workspace-cache/inputs/lifecycle.test.cjs
 
       # Register this first so its post step checks the result after the cache post steps.
       - name: Create workspace fixture

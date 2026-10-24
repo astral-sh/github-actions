@@ -1,0 +1,15 @@
+name: Prepare Rust build input cache
+description: Allocate metadata storage outside the Cargo workspace.
+
+inputs:
+  workspace:
+    description: Cargo workspace directory.
+    required: true
+
+outputs:
+  directory:
+    description: Directory to cache alongside the Cargo artifacts.
+
+runs:
+  using: node24
+  main: main.cjs
