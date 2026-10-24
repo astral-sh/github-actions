@@ -59,7 +59,7 @@ def build_script_packages(workspace: Path, root: Path) -> dict[str, str]:
             known.update(metadata(manifest))
         package = known[manifest]
         if any("custom-build" in target["kind"] for target in package["targets"]):
-            packages[package["name"]] = str(manifest.parent.relative_to(root))
+            packages[str(manifest.parent.relative_to(root))] = package["name"]
         for dependency in package["dependencies"]:
             if dependency.get("path"):
                 pending.append(Path(dependency["path"]) / "Cargo.toml")
@@ -91,9 +91,7 @@ def scan(workspace: Path) -> dict:
     root = checkout_root(workspace)
     packages = build_script_packages(workspace, root)
     output = (
-        subprocess.check_output(
-            ["git", "ls-files", "-z", "--", *packages.values()], cwd=root
-        )
+        subprocess.check_output(["git", "ls-files", "-z", "--", *packages], cwd=root)
         if packages
         else b""
     )
@@ -171,12 +169,17 @@ def restore(workspace: Path, saved: dict, profiles: list[Path]) -> dict[str, int
         prefix = workspace.relative_to(root)
         saved = saved | {
             "packages": {
-                package: str(prefix / directory)
+                str(prefix / directory): package
                 for package, directory in saved["packages"].items()
             },
             **{
                 group: {
-                    str(prefix / name): record for name, record in saved[group].items()
+                    (
+                        (prefix / name).as_posix()
+                        if group == "files"
+                        else str(prefix / name)
+                    ): record
+                    for name, record in saved[group].items()
                 }
                 for group in ("files", "directories")
             },
@@ -198,7 +201,7 @@ def restore(workspace: Path, saved: dict, profiles: list[Path]) -> dict[str, int
                 changed_paths.add(name)
     changed_packages = {
         package
-        for package, directory in current["packages"].items()
+        for directory, package in current["packages"].items()
         if any(Path(name).is_relative_to(directory) for name in changed_paths)
     }
     # Changed tracked inputs or directory listings must rerun their build scripts
