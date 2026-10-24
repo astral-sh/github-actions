@@ -196,8 +196,24 @@ class CacheContentsTest(unittest.TestCase):
         archive.parent.mkdir(parents=True)
         archive.write_text("archive")
         clean(self.configuration)
-        self.assertFalse((self.home / "registry/src").exists())
+        self.assertFalse(source.exists())
         self.assertEqual(archive.read_text(), "archive")
+
+    def test_dependency_only_cleanup_retains_native_dependency_sources(self):
+        self.configuration["workspace_crates"] = False
+        with Path(self.configuration["lock"]).open("a") as lock:
+            lock.write(
+                '\n[[package]]\nname="native-sys"\nversion="1.0.0"\n'
+                'source="registry+example"\n'
+            )
+        source = self.home / "registry/src/example/native-sys-1.0.0"
+        source.mkdir(parents=True)
+        (source / "native.c").write_text("native")
+        unused = self.home / "registry/src/example/unused-sys-1.0.0"
+        unused.mkdir()
+        clean(self.configuration)
+        self.assertEqual((source / "native.c").read_text(), "native")
+        self.assertFalse(unused.exists())
 
     def test_cleanup_keeps_host_cross_and_nested_package_profiles(self):
         target = Path(self.configuration["target"])

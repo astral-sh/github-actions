@@ -296,13 +296,20 @@ def clean(configuration: dict) -> None:
         for package in packages
         if package.get("source", "").startswith("registry+")
     }
-    # Workspace caches retain extracted registry sources because build scripts can
-    # depend on their mtimes.
-    for kind in ("cache", "src"):
+    # Keep extracted sources for workspace caches and `-sys` dependencies:
+    # build scripts can depend on source mtimes.
+    source_packages = (
+        registry_packages
+        if configuration["workspace_crates"]
+        else {
+            f"{package['name']}-{package['version']}"
+            for package in packages
+            if package["name"].endswith("-sys")
+            and package.get("source", "").startswith("registry+")
+        }
+    )
+    for kind, keep in (("cache", registry_packages), ("src", source_packages)):
         directory = cargo_home / "registry" / kind
-        if kind == "src" and not configuration["workspace_crates"]:
-            remove(directory)
-            continue
         if directory.is_dir():
             for registry in directory.iterdir():
                 if registry.is_dir() and not registry.is_symlink():
@@ -312,7 +319,7 @@ def clean(configuration: dict) -> None:
                             if kind == "cache"
                             else package.name
                         )
-                        if name not in registry_packages:
+                        if name not in keep:
                             remove(package)
     target = Path(configuration["target"])
     profiles = {path.parent for path in target.rglob(".fingerprint") if path.is_dir()}

@@ -80,9 +80,12 @@ restores are rejected.
 
 The action caches the target directory, Cargo's registry and Git dependencies,
 and optionally Cargo-installed binaries. It removes incremental artifacts and
-top-level build outputs before upload. Dependency sources remain cached
-because build scripts can depend on their timestamps. Runner-provided binaries
-are excluded, and restoring installed tools does not overwrite existing binaries.
+top-level build outputs before upload. Before uploading a new cache, the action
+retains registry archives for locked dependencies in both modes. Workspace mode
+also retains their extracted sources because build scripts can depend on source
+timestamps. Dependency-only mode retains extracted sources only for locked `-sys`
+dependencies. Runner-provided binaries are excluded, and restoring installed tools
+does not overwrite existing binaries.
 `CARGO_INCREMENTAL` defaults to `0` when the caller has not set it.
 
 Keys include the active compiler and Cargo versions, runner OS and architecture,
