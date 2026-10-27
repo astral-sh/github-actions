@@ -165,6 +165,15 @@ class SourceFingerprintTest(unittest.TestCase):
             source_fingerprint(self.root), source_fingerprint(self.source.parent)
         )
 
+    def test_tracked_path_replaced_by_directory(self):
+        before = source_fingerprint(self.root)
+        self.source.unlink()
+        self.source.mkdir()
+        after = source_fingerprint(self.root)
+        self.assertNotEqual(before, after)
+        (self.source / "untracked.rs").write_text("pub fn generated() {}\n")
+        self.assertEqual(after, source_fingerprint(self.root))
+
     def test_deleted_inputs_refresh(self):
         before = source_fingerprint(self.root)
         self.source.unlink()

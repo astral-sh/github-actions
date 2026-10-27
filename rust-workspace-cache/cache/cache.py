@@ -105,12 +105,14 @@ def source_fingerprint(workspace: Path) -> str:
             identity = ["missing"]
         elif not path.resolve().is_relative_to(root):
             identity = ["outside-checkout"]
-        else:
+        elif path.is_file():
             checksum = hashlib.sha256()
             with path.open("rb") as source:
                 for block in iter(lambda: source.read(1024 * 1024), b""):
                     checksum.update(block)
             identity = [checksum.hexdigest(), stat.S_IMODE(path.stat().st_mode)]
+        else:
+            identity = ["non-file", stat.S_IFMT(path.stat().st_mode)]
         sources[os.fsdecode(name)] = identity
     return digest(sources)
 
