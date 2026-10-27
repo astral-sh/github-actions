@@ -45,6 +45,12 @@ fs.writeFileSync(
   '[project]\nname="workspace-cache-fixture"\nversion="0.0.0"\nrequires-python="==3.7.*"\ndependencies=[]\n[tool.uv]\nrequired-version="==0.0.1"\n',
 );
 fs.writeFileSync(path.join(workspace, ".python-version"), "3.7\n");
+if (["refresh", "refreshed"].includes(process.env.INPUT_PHASE)) {
+  fs.appendFileSync(
+    path.join(workspace, "src", "lib.rs"),
+    "// Changed source.\n",
+  );
+}
 for (const [command, args, cwd] of [
   ["cargo", ["generate-lockfile", "--offline"], workspace],
   ["cargo", ["generate-lockfile", "--offline"], path.join(directory, "tool")],

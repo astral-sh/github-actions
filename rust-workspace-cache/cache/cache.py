@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tomllib
 from pathlib import Path
@@ -65,6 +66,55 @@ def build_environment(environment: dict[str, str]) -> dict[str, str]:
     }
 
 
+def source_fingerprint(workspace: Path) -> str:
+    root = Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"], cwd=workspace, text=True
+        ).strip()
+    )
+    entries = subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=root)
+    sources = {}
+    for entry in entries.split(b"\0"):
+        if not entry:
+            continue
+        description, name = entry.split(b"\t", 1)
+        mode, object_id, stage = description.split()
+        if stage != b"0":
+            raise ValueError("Cannot cache a checkout with unresolved Git conflicts")
+        sources[os.fsdecode(name)] = [mode.decode(), object_id.decode()]
+    # Reuse indexed object IDs for unchanged paths; hash unstaged changes.
+    modified = subprocess.check_output(
+        [
+            "git",
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-only",
+            "-z",
+            "--ignore-submodules=all",
+        ],
+        cwd=root,
+    )
+    for name in modified.split(b"\0"):
+        if not name:
+            continue
+        path = root / os.fsdecode(name)
+        if path.is_symlink():
+            identity = ["symlink", os.readlink(path)]
+        elif not path.exists():
+            identity = ["missing"]
+        elif not path.resolve().is_relative_to(root):
+            identity = ["outside-checkout"]
+        else:
+            checksum = hashlib.sha256()
+            with path.open("rb") as source:
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    checksum.update(block)
+            identity = [checksum.hexdigest(), stat.S_IMODE(path.stat().st_mode)]
+        sources[os.fsdecode(name)] = identity
+    return digest(sources)
+
+
 def cache_keys(
     configuration: dict,
     compiler: str,
@@ -73,7 +123,8 @@ def cache_keys(
     lock: dict,
     cargo_config: list,
     environment: dict[str, str],
-) -> tuple[str, str]:
+    source: str | None = None,
+) -> tuple[str, list[str]]:
     scope = {
         "compiler": compiler,
         "cargo": cargo,
@@ -105,7 +156,17 @@ def cache_keys(
         )
         + "-"
     )
-    return prefix + digest(dependencies), prefix
+    dependency_key = prefix + digest(dependencies)
+    if configuration["workspace_crates"]:
+        if source is None:
+            raise ValueError("Workspace caches require a source fingerprint")
+        # Within each cache scope, try matching dependency keys before older ones.
+        return dependency_key + "-" + source, [
+            dependency_key + "-",
+            dependency_key,
+            prefix,
+        ]
+    return dependency_key, [prefix]
 
 
 def prepare(configuration_path: Path) -> None:
@@ -178,8 +239,18 @@ def prepare(configuration_path: Path) -> None:
         else [],
         "lock": str(workspace_root / "Cargo.lock"),
     }
-    key, restore_key = cache_keys(
-        configuration, compiler, cargo, manifests, lock, configs, dict(os.environ)
+    source = (
+        source_fingerprint(workspace) if configuration["workspace_crates"] else None
+    )
+    key, restore_keys = cache_keys(
+        configuration,
+        compiler,
+        cargo,
+        manifests,
+        lock,
+        configs,
+        dict(os.environ),
+        source,
     )
     paths = [
         str(cargo_home / "registry"),
@@ -192,7 +263,9 @@ def prepare(configuration_path: Path) -> None:
         paths.append(value("directory"))
     configuration_path.write_text(json.dumps(configuration))
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-        output.write(f"key={key}\nrestore-key={restore_key}\npaths<<RUST_CACHE_PATHS\n")
+        output.write(f"key={key}\nrestore-key<<RUST_CACHE_RESTORE_KEYS\n")
+        output.write("\n".join(restore_keys) + "\nRUST_CACHE_RESTORE_KEYS\n")
+        output.write("paths<<RUST_CACHE_PATHS\n")
         output.write("\n".join(paths) + "\nRUST_CACHE_PATHS\n")
     print(f"Active compiler: {compiler.splitlines()[0]}")
     print(f"Rust cache key: {key}")

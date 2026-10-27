@@ -129,3 +129,87 @@ jobs:
           FIXTURE_WORKSPACE: ${{ steps.fixture.outputs.workspace }}
           FIXTURE_MODE: ${{ matrix.workspace-crates }}
           FIXTURE_PHASE: restore
+
+  refresh:
+    needs: restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+
+      - name: Create workspace fixture
+        id: fixture
+        uses: $/rust-workspace-cache/tests/smoke
+        with:
+          phase: refresh
+
+      - name: Cache workspace
+        id: cache
+        uses: $/rust-workspace-cache
+        with:
+          workspace: ${{ steps.fixture.outputs.workspace }}
+          profile: |
+            debug
+            profiling
+          add-job-id-key: "false"
+          prefix-key: test-native-rust-cache
+          key: ${{ github.run_id }}-${{ github.run_attempt }}
+          save-if: "true"
+
+      - name: Require a compatible cache fallback
+        if: steps.cache.outputs.cache-hit != 'false'
+        run: exit 1
+
+      - name: Build workspace
+        run: node rust-workspace-cache/tests/smoke/build.cjs
+        env:
+          FIXTURE_WORKSPACE: ${{ steps.fixture.outputs.workspace }}
+          FIXTURE_MODE: "true"
+          FIXTURE_PHASE: refresh
+
+  refreshed:
+    needs: refresh
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+
+      - name: Create workspace fixture
+        id: fixture
+        uses: $/rust-workspace-cache/tests/smoke
+        with:
+          phase: refreshed
+
+      - name: Cache workspace
+        id: cache
+        uses: $/rust-workspace-cache
+        with:
+          workspace: ${{ steps.fixture.outputs.workspace }}
+          profile: |
+            debug
+            profiling
+          add-job-id-key: "false"
+          prefix-key: test-native-rust-cache
+          key: ${{ github.run_id }}-${{ github.run_attempt }}
+          save-if: "false"
+
+      - name: Require the refreshed cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: exit 1
+
+      - name: Build workspace
+        run: node rust-workspace-cache/tests/smoke/build.cjs
+        env:
+          FIXTURE_WORKSPACE: ${{ steps.fixture.outputs.workspace }}
+          FIXTURE_MODE: "true"
+          FIXTURE_PHASE: refreshed
