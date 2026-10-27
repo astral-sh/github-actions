@@ -30,7 +30,7 @@ for (const profile of ["dev", "profiling"]) {
         message.reason === "compiler-artifact" &&
         message.target.kind.includes("lib"),
     );
-  if (process.env.FIXTURE_PHASE === "restore") {
+  if (process.env.FIXTURE_PHASE !== "seed") {
     const dependency = artifacts.find(
       (artifact) => artifact.target.name === "cached_dependency",
     );
@@ -44,7 +44,8 @@ for (const profile of ["dev", "profiling"]) {
     );
     assert.equal(
       workspace.fresh,
-      process.env.FIXTURE_MODE === "true",
+      process.env.FIXTURE_MODE === "true" &&
+        process.env.FIXTURE_PHASE !== "refresh",
       "Workspace reuse must match the cache mode",
     );
   }

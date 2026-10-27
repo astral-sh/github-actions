@@ -1,4 +1,6 @@
 import copy
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,6 +13,7 @@ from cache import (
     installed,
     normalize_manifest,
     restore_binaries,
+    source_fingerprint,
     stage_binaries,
     write_installs,
 )
@@ -42,10 +45,22 @@ class CacheKeyTest(unittest.TestCase):
             ]
         }
 
-    def keys(self, compiler="rustc 1.99.0\ncommit-hash: selected", **changes):
+    def keys(
+        self,
+        compiler="rustc 1.99.0\ncommit-hash: selected",
+        source="source-one",
+        **changes,
+    ):
         configuration = self.configuration | changes
         return cache_keys(
-            configuration, compiler, "cargo 1.99.0", [], self.lock, [], self.environment
+            configuration,
+            compiler,
+            "cargo 1.99.0",
+            [],
+            self.lock,
+            [],
+            self.environment,
+            source,
         )
 
     def test_ignores_toolchain_installation_and_cargo_home(self):
@@ -68,8 +83,21 @@ class CacheKeyTest(unittest.TestCase):
         self.lock["package"][0]["checksum"] = "two"
         after = self.keys()
         self.assertNotEqual(before[0], after[0])
+        self.assertEqual(before[1][-1], after[1][-1])
+        self.assertTrue(after[0].startswith(after[1][0]))
+
+    def test_source_changes_refresh_workspace_caches_with_dependency_fallbacks(self):
+        before = self.keys()
+        after = self.keys(source="source-two")
+        self.assertNotEqual(before[0], after[0])
         self.assertEqual(before[1], after[1])
-        self.assertTrue(after[0].startswith(after[1]))
+        self.assertTrue(before[0].startswith(after[1][0]))
+        self.assertTrue(after[0].startswith(after[1][0]))
+        self.assertEqual(after[1][1], after[1][0].removesuffix("-"))
+        self.assertEqual(
+            self.keys(workspace_crates=False),
+            self.keys(workspace_crates=False, source="source-two"),
+        )
 
     def test_workspace_version_changes_do_not_split_dependency_caches(self):
         before = self.keys()
@@ -101,6 +129,55 @@ class CacheKeyTest(unittest.TestCase):
         self.environment["GITHUB_JOB"] = "consumer"
         self.assertEqual(shared, self.keys())
         self.assertNotEqual(private, self.keys(add_job=True))
+
+
+class SourceFingerprintTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        subprocess.run(["git", "init", "--quiet"], cwd=self.root, check=True)
+        self.source = self.root / "src/lib.rs"
+        self.source.parent.mkdir()
+        self.source.write_text("pub fn example() {}\n")
+        subprocess.run(["git", "add", "."], cwd=self.root, check=True)
+
+    def test_changed_tracked_contents_refresh_even_without_staging(self):
+        before = source_fingerprint(self.root)
+        self.source.write_text("pub fn different() {}\n")
+        self.assertNotEqual(before, source_fingerprint(self.root))
+        self.source.write_text("pub fn example() {}\n")
+        self.assertEqual(before, source_fingerprint(self.root))
+
+    def test_checkout_timestamps_and_untracked_outputs_do_not_refresh(self):
+        before = source_fingerprint(self.root)
+        os.utime(self.source, (1, 1))
+        (self.root / "output").write_text("generated")
+        self.assertEqual(before, source_fingerprint(self.root))
+
+    def test_nested_workspaces_include_inputs_elsewhere_in_the_checkout(self):
+        before = source_fingerprint(self.source.parent)
+        other = self.root / "build-input.txt"
+        other.write_text("tracked build input")
+        subprocess.run(["git", "add", str(other)], cwd=self.root, check=True)
+        self.assertNotEqual(before, source_fingerprint(self.source.parent))
+        self.assertEqual(
+            source_fingerprint(self.root), source_fingerprint(self.source.parent)
+        )
+
+    def test_tracked_path_replaced_by_directory(self):
+        before = source_fingerprint(self.root)
+        self.source.unlink()
+        self.source.mkdir()
+        after = source_fingerprint(self.root)
+        self.assertNotEqual(before, after)
+        (self.source / "untracked.rs").write_text("pub fn generated() {}\n")
+        self.assertEqual(after, source_fingerprint(self.root))
+
+    def test_deleted_inputs_refresh(self):
+        before = source_fingerprint(self.root)
+        self.source.unlink()
+        self.assertNotEqual(before, source_fingerprint(self.root))
 
 
 class CacheContentsTest(unittest.TestCase):

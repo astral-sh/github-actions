@@ -96,6 +96,19 @@ the dependency key. A changed dependency key can restore a compatible older entr
 changes to the compiler or keyed build configuration cannot. Set `key` to distinguish
 build inputs not covered by these components.
 
+Workspace cache keys also include a fingerprint of Git-tracked checkout paths.
+The fingerprint uses indexed object IDs and Git modes, plus unstaged changes
+reported by Git. On an exact miss, restore keys prefer
+entries with the same dependency key, then entries with other dependency keys and
+the same remaining key components, within each searched cache scope. After a
+successful job, `save-if: "true"` can save rebuilt artifacts under the new key.
+Dependency-only keys do not include the source fingerprint.
+
+Refreshing workspace caches trades more uploads and stored entries for fresher
+artifacts. Enable writes on the default branch so later pull requests can reuse
+those builds. Untracked files are excluded; submodules use their indexed commit.
+Cargo still checks whether restored artifacts are valid for the current build.
+
 `add-job-id-key: "false"` permits sharing when the remaining key components,
 cached paths, and GitHub cache scope match. The `cache-hit` output is `true` only
 for an exact match. Exact hits and `save-if: "false"` skip cleanup and upload.
