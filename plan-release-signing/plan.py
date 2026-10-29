@@ -15,26 +15,46 @@ from pathlib import Path, PurePosixPath
 
 PLATFORMS = {
     "macos": {
-        "aarch64-apple-darwin": ("namespace-profile-macos-15", "arm64"),
-        "x86_64-apple-darwin": ("namespace-profile-macos-15", "x64"),
+        "aarch64-apple-darwin": ("macos-aarch64-8", "arm64"),
+        "x86_64-apple-darwin": ("macos-aarch64-8", "x64"),
     },
     "windows": {
         "aarch64-pc-windows-msvc": (
-            "github-windows-11-aarch64-8",
+            "windows-aarch64-8",
             "arm64",
         ),
         "i686-pc-windows-msvc": (
-            "namespace-profile-windows-2022-x86-64-16x32",
+            "windows-x86_64-16",
             "x86",
         ),
         "x86_64-pc-windows-msvc": (
-            "namespace-profile-windows-2022-x86-64-16x32",
+            "windows-x86_64-16",
             "x64",
         ),
     },
 }
 
 SIGNED_TARGET_SUFFIXES = ("-apple-darwin", "-pc-windows-msvc")
+
+
+def runner_labels(value: str = "") -> dict[str, str]:
+    """Read resolved labels, or the preferred catalog candidates for callers without a map."""
+    if value:
+        runners = json.loads(value)
+    else:
+        catalog_path = Path(__file__).parents[1] / "select-runners" / "runners.json"
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        runners = {role: candidates[0]["label"] for role, candidates in catalog.items()}
+    if not isinstance(runners, dict) or not all(
+        isinstance(role, str)
+        and isinstance(label, str)
+        and label
+        and label.strip() == label
+        and not any(ord(char) < 32 or ord(char) == 127 for char in label)
+        for role, label in runners.items()
+    ):
+        raise ValueError("runners must map roles to non-empty runner labels")
+    return runners
 
 
 def release_targets(workspace: Path) -> list[str]:
@@ -122,12 +142,23 @@ def signing_plan(
     archive_package: str,
     wheels_directory: PurePosixPath,
     github_archives_directory: PurePosixPath,
+    runners: dict[str, str] | None = None,
 ) -> dict[str, list[dict]]:
     """Require every macOS and Windows target to have a native verifier."""
     expected = {target for target in targets if target.endswith(SIGNED_TARGET_SUFFIXES)}
     configured = {target for platforms in PLATFORMS.values() for target in platforms}
     if unsupported := expected - configured:
         raise ValueError(f"Unsupported release signing targets: {sorted(unsupported)}")
+    if runners is None:
+        runners = runner_labels()
+    required_roles = {
+        role
+        for platforms in PLATFORMS.values()
+        for target, (role, _) in platforms.items()
+        if target in expected
+    }
+    if missing := required_roles - runners.keys():
+        raise ValueError(f"Missing release signing runners: {sorted(missing)}")
 
     plan = {}
     for system, platforms in PLATFORMS.items():
@@ -137,7 +168,7 @@ def signing_plan(
         plan[system] = [
             {
                 "target": target,
-                "runner": platforms[target][0],
+                "runner": runners[platforms[target][0]],
                 "python-architecture": platforms[target][1],
                 **artifact_inputs(
                     system,
@@ -163,6 +194,7 @@ def main() -> None:
         os.environ["RELEASE_ARCHIVE_PACKAGE"],
         PurePosixPath(os.environ["RELEASE_WHEELS_DIRECTORY"]),
         PurePosixPath(os.environ["RELEASE_GITHUB_ARCHIVES_DIRECTORY"]),
+        runner_labels(os.environ.get("RELEASE_RUNNERS", "")),
     )
 
     print(f"targets={json.dumps(targets, separators=(',', ':'))}")

@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from plan import package_inventories, signing_plan
+from plan import package_inventories, runner_labels, signing_plan
 
 TARGETS = [
     "aarch64-apple-darwin",
@@ -111,6 +111,48 @@ class SigningPlanTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "executables must be distinct"):
             package_inventories(json.dumps(packages))
+
+    def test_uses_resolved_free_runners(self) -> None:
+        runners = {
+            "macos-aarch64-8": "macos-15",
+            "windows-x86_64-16": "windows-2025",
+            "windows-aarch64-8": "windows-11-arm",
+        }
+        plan = signing_plan(
+            TARGETS,
+            package_inventories(json.dumps(UV_PACKAGES)),
+            "uv",
+            PurePosixPath("wheels"),
+            PurePosixPath("github-archives"),
+            runner_labels(json.dumps(runners)),
+        )
+        self.assertEqual(
+            [target["runner"] for target in plan["macos"]], ["macos-15"] * 2
+        )
+        self.assertEqual(
+            [target["runner"] for target in plan["windows"]],
+            ["windows-11-arm", "windows-2025", "windows-2025"],
+        )
+
+    def test_rejects_missing_runner_in_supplied_map(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Missing release signing runners"):
+            signing_plan(
+                TARGETS,
+                package_inventories(json.dumps(UV_PACKAGES)),
+                "uv",
+                PurePosixPath("wheels"),
+                PurePosixPath("github-archives"),
+                {},
+            )
+
+    def test_preferred_catalog_candidates(self) -> None:
+        plan = self.plan(UV_PACKAGES, "uv")
+        self.assertEqual(plan["macos"][0]["runner"], "namespace-profile-macos-15")
+        self.assertEqual(plan["windows"][0]["runner"], "github-windows-11-aarch64-8")
+        self.assertEqual(
+            plan["windows"][1]["runner"],
+            "namespace-profile-windows-2022-x86-64-16x32",
+        )
 
 
 if __name__ == "__main__":

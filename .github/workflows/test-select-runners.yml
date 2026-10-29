@@ -1,0 +1,52 @@
+name: Test runner selection
+
+on:
+  pull_request:
+    paths:
+      - select-runners/**
+      - plan-release-signing/**
+      - .github/workflows/test-select-runners.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      runners: ${{ steps.runners.outputs.runners }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - run: node --test select-runners/main.test.cjs
+      - run: python3 -m unittest discover -s plan-release-signing
+      - uses: ./select-runners
+        id: runners
+        with:
+          free-only: "true"
+          required: ubuntu-x86_64-16 ubuntu-aarch64-4 windows-x86_64-16
+
+  selected-runner:
+    needs: test
+    runs-on: ${{ fromJSON(needs.test.outputs.runners).ubuntu-x86_64-16 }}
+    timeout-minutes: 5
+    steps:
+      - run: echo "Scheduled on the selected free runner"
+
+  unavailable-runner:
+    needs: test
+    if: ${{ fromJSON(needs.test.outputs.runners).ubuntu-x86_64-codspeed != '' }}
+    runs-on: ${{ fromJSON(needs.test.outputs.runners).ubuntu-x86_64-codspeed }}
+    steps:
+      - run: exit 1
