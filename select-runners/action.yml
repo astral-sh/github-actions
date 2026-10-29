@@ -1,0 +1,20 @@
+name: "Select runners"
+description: "Resolve shared runner roles, with GitHub-hosted fallbacks outside Astral."
+
+inputs:
+  free-only:
+    description: "Select only free candidates. Defaults to true outside the astral-sh organization."
+    required: false
+  required:
+    description: "Runner roles that must be available, separated by whitespace."
+    required: false
+
+outputs:
+  runners:
+    description: "JSON object mapping available runner roles to labels."
+  free-only:
+    description: "Whether selection was restricted to free candidates."
+
+runs:
+  using: node24
+  main: main.cjs
