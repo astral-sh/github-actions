@@ -31,7 +31,7 @@ jobs:
           package-manager-cache: false
       - run: node --test select-runners/main.test.cjs
       - run: python3 -m unittest discover -s plan-release-signing
-      - uses: ./select-runners
+      - uses: $/select-runners
         id: runners
         with:
           free-only: "true"
