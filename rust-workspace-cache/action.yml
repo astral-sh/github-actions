@@ -8,6 +8,9 @@ inputs:
   target-directory:
     description: Cargo target directory, relative to the workspace.
     default: "target"
+  extra-target-directory:
+    description: Name of a tool-owned directory directly inside the Cargo target directory to save alongside the compiled crates.
+    default: ""
   profile:
     description: Build profile directories within the target directory, separated by newlines.
     default: "debug"
@@ -40,12 +43,13 @@ runs:
       uses: $/rust-workspace-cache/inputs/prepare
       with:
         workspace: ${{ inputs.workspace }}
+        extra-target-directory: ${{ inputs.extra-target-directory }}
 
     - name: Restore Rust workspace cache
       id: cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        prefix-key: ${{ inputs.prefix-key }}-build-inputs-v1
+        prefix-key: ${{ inputs.prefix-key }}-build-inputs-v2
         key: ${{ inputs.key }}
         workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
         cache-workspace-crates: "true"
@@ -59,6 +63,7 @@ runs:
       with:
         workspace: ${{ inputs.workspace }}
         target-directory: ${{ inputs.target-directory }}
+        extra-target-directory: ${{ inputs.extra-target-directory }}
         profile: ${{ inputs.profile }}
         directory: ${{ steps.inputs.outputs.directory }}
         save: ${{ inputs.save-if == 'true' && steps.cache.outputs.cache-hit != 'true' }}

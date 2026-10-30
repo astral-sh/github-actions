@@ -44,6 +44,7 @@ evidence that Cargo tracked artifact usage.
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `workspace`        | `.`                 | Cargo workspace directory, relative to the checkout or absolute.                                                                         |
 | `target-directory` | `target`            | Cargo target directory, relative to `workspace`.                                                                                         |
+| `extra-target-directory` | Empty | Top-level tool directory to include in the same cache entry as the compiled crates, such as `hawk-fragments`. |
 | `profile`          | `debug`             | Profile directories within `target-directory`, separated by newlines, such as `debug`, `profiling`, or `x86_64-unknown-linux-gnu/debug`. |
 | `prefix-key`       | `v1-rust-workspace` | Cache key prefix.                                                                                                                        |
 | `key`              | Empty               | Additional cache key.                                                                                                                    |
@@ -55,6 +56,13 @@ evidence that Cargo tracked artifact usage.
 must use the same workspace and target directory. `profile` selects the directories
 to prune; other profile directories are left unchanged. When pruning runs, each
 selected profile must contain active Cargo fingerprints from the job.
+
+Use `extra-target-directory` for generated data that refers to a particular Cargo build.
+For example, Hawk stores its graphs in `hawk-fragments` inside its target directory.
+The action moves this directory aside before Cargo cache cleanup and restores it as
+a unit, replacing any existing contents. The name must be separate from the Cargo
+profiles and contain only letters, numbers, underscores, hyphens, or dot-separated
+components. Changing the name selects a separate cache.
 
 For jobs that build multiple profiles:
 
@@ -86,12 +94,18 @@ tracked inputs or directory entries within a current build-script package
 invalidate that package's cached runs and their output directories in the selected
 profiles.
 
-The action does not compare the contents of Git metadata, symlinks, untracked
-files, or inputs outside these packages; Cargo's usual freshness rules still apply.
+The timestamp comparison covers tracked regular files in those packages.
+Cargo's usual freshness rules apply to inputs outside the timestamp snapshot.
 Enable `checksum-freshness` for Rust source reuse across fresh checkouts. Restore
 one artifact cache per workspace; overlapping workspace restores are rejected.
 
-The action adds `-build-inputs-v1` to `prefix-key` and caches the input metadata
+Cargo checksums cover files read by the previous build. Adding a second candidate
+for a Rust module can change compilation without changing any of those files.
+The action records Git file paths, file kinds, and symlink destinations. When
+that layout changes, it discards workspace fingerprints in the selected profiles
+so Cargo checks the new layout. Compiled third-party dependencies remain reusable.
+
+The action adds `-build-inputs-v2` to `prefix-key` and caches the input metadata
 alongside the Cargo artifacts. The cache entry is populated when saving is enabled
 and the job succeeds. Metadata is recorded only when a new artifact cache will be
 saved; exact hits and read-only jobs restore the snapshot when available.

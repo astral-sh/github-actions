@@ -36,11 +36,11 @@ if (
 workspaces.push(workspace);
 fs.writeFileSync(registry, JSON.stringify(workspaces));
 
-const id = crypto
-  .createHash("sha256")
-  .update(workspace)
-  .digest("hex")
-  .slice(0, 16);
+const hash = crypto.createHash("sha256").update(workspace);
+const extra = process.env["INPUT_EXTRA-TARGET-DIRECTORY"];
+// The metadata path is part of the cache version. Isolate different layouts.
+if (extra) hash.update("\0").update(extra);
+const id = hash.digest("hex").slice(0, 16);
 const directory = path.join(process.env.RUNNER_TEMP, `rust-cache-inputs-${id}`);
 // A cache miss must not reuse metadata left by an earlier job on the runner.
 fs.rmSync(directory, { recursive: true, force: true });

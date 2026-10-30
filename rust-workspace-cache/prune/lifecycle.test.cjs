@@ -95,6 +95,17 @@ function post(context, results, platform = process.platform) {
     },
   };
   const child = { env: { STATE_cache: JSON.stringify(state) }, platform };
+  const runtime = { exports: {} };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, "../runtime.cjs"), "utf8"),
+    {
+      __dirname: path.dirname(__dirname),
+      module: runtime,
+      process: child,
+      require: (name) =>
+        name === "node:child_process" ? childProcess : require(name),
+    },
+  );
   try {
     vm.runInNewContext(
       fs.readFileSync(path.join(__dirname, "post.cjs"), "utf8"),
@@ -102,7 +113,7 @@ function post(context, results, platform = process.platform) {
         __dirname,
         process: child,
         require: (name) =>
-          name === "node:child_process" ? childProcess : require(name),
+          name === "../runtime.cjs" ? runtime.exports : require(name),
       },
     );
   } finally {

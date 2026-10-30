@@ -12,6 +12,49 @@ from pathlib import Path
 import inputs
 
 
+class ToolDirectoryTest(unittest.TestCase):
+    def test_restore_replaces_stale_files_with_the_saved_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            live = root / "target" / "tool-data"
+            staged = root / "cache" / "target-tool-data"
+            inputs.move_tool_directory(staged, live)
+            self.assertFalse(live.exists())
+
+            live.mkdir(parents=True)
+            (live / "graph").write_bytes(b"saved graph")
+            inputs.move_tool_directory(live, staged)
+            self.assertFalse(live.exists())
+
+            live.mkdir()
+            (live / "stale").touch()
+            inputs.move_tool_directory(staged, live)
+            self.assertEqual((live / "graph").read_bytes(), b"saved graph")
+            self.assertFalse((live / "stale").exists())
+            self.assertFalse(staged.exists())
+
+    def test_source_layout_ignores_build_outputs_and_detects_retargeted_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            subprocess.run(["git", "init", "--quiet"], cwd=root, check=True)
+            target = root / "build [output]"
+            target.mkdir()
+            for name in ("a", "b"):
+                (root / name).write_text("same contents")
+            link = root / "source.rs"
+            try:
+                link.symlink_to("a")
+            except OSError as error:
+                self.skipTest(str(error))
+            saved = inputs.source_layout(root, target)
+            (target / "artifact").touch()
+            (root / "a").write_text("new contents")
+            self.assertEqual(inputs.source_layout(root, target), saved)
+            link.unlink()
+            link.symlink_to("b")
+            self.assertNotEqual(inputs.source_layout(root, target), saved)
+
+
 class CargoInputsTest(unittest.TestCase):
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory(prefix="cargo-inputs-")
@@ -79,6 +122,32 @@ class CargoInputsTest(unittest.TestCase):
         self.assertGreater(result["restored_files"], 0)
         self.assertEqual(result["invalidated_build_scripts"], 0)
         self.build("original", rebuilt=False)
+
+    def test_new_module_path_invalidates_a_binary_without_a_build_script(self) -> None:
+        (self.root / "build.rs").unlink()
+        (self.root / "src/main.rs").write_text(
+            'mod value; fn main() { println!("{}", value::get()); }\n'
+        )
+        nested = self.root / "src/value/mod.rs"
+        nested.parent.mkdir()
+        nested.write_text("pub fn get() -> u32 { 42 }\n")
+        self.build("42", rebuilt=True)
+        self.saved = inputs.scan(self.root)
+        self.assertEqual(self.saved["packages"], {})
+        self.assertEqual(self.restore()["invalidated_workspace_units"], 0)
+        self.build("42", rebuilt=False)
+
+        (self.root / "src/value.rs").write_text("pub fn get() -> u32 { 43 }\n")
+        self.assertGreater(self.restore()["invalidated_workspace_units"], 0)
+        result = subprocess.run(
+            ["cargo", "run", "--offline"],
+            cwd=self.root,
+            env=self.environment,
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("E0761", result.stderr)
 
     def test_changed_bytes_with_preserved_timestamp_rebuild(self) -> None:
         old = self.value.stat().st_mtime_ns

@@ -8,6 +8,9 @@ inputs:
   target-directory:
     description: Cargo target directory, relative to the workspace.
     required: true
+  extra-target-directory:
+    description: Name of the additional tool-owned target directory.
+    default: ""
   profile:
     description: Build profile directories within the target directory, separated by newlines.
     required: true

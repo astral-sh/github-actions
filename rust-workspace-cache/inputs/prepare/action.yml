@@ -2,6 +2,9 @@ name: Prepare Rust build input cache
 description: Allocate metadata storage outside the Cargo workspace.
 
 inputs:
+  extra-target-directory:
+    description: Name of the additional tool-owned target directory.
+    default: ""
   workspace:
     description: Cargo workspace directory.
     required: true
