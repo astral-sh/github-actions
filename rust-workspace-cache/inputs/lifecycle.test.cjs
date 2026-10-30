@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
+const { profileDirectories } = require("../runtime.cjs");
 
 function fixture(context) {
   const directory = fs.realpathSync(
@@ -81,7 +82,7 @@ function lifecycle(context, save, status = 0, extra = "") {
   const child = {
     env: {
       INPUT_WORKSPACE: workspace,
-      INPUT_PROFILE: "debug\r\n profiling\r\n",
+      INPUT_PROFILE: "debug\r\n triple/profiling\r\n",
       "INPUT_TARGET-DIRECTORY": "build output",
       "INPUT_EXTRA-TARGET-DIRECTORY": extra,
       INPUT_DIRECTORY: directory,
@@ -93,10 +94,13 @@ function lifecycle(context, save, status = 0, extra = "") {
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, file), "utf8"), {
       process: child,
       require: (name) =>
-        name === "./python.cjs"
-          ? (...args) => {
-              calls.push(JSON.parse(JSON.stringify(args)));
-              return status;
+        name === "../runtime.cjs"
+          ? {
+              profileDirectories,
+              runPython(workspace, script, operation, manifest, ...args) {
+                calls.push({ workspace, script, operation, manifest, args });
+                return status;
+              },
             }
           : require(name),
     });
@@ -114,34 +118,51 @@ test("restores read-only hits without recording replacement metadata", (context)
   assert.equal(result.status, 0);
   assert.equal(result.recorded, "");
   assert.deepEqual(result.calls, [
-    [
-      result.workspace,
-      "restore",
-      path.join(result.directory, "manifest.json"),
-      [
+    {
+      workspace: result.workspace,
+      script: "inputs/inputs.py",
+      operation: "restore",
+      manifest: path.join(result.directory, "manifest.json"),
+      args: [
         path.join(result.workspace, "build output/debug"),
-        path.join(result.workspace, "build output/profiling"),
+        path.join(result.workspace, "build output/triple/profiling"),
+        "--target-directory",
+        path.join(result.workspace, "build output"),
       ],
-      null,
-      path.join(result.workspace, "build output"),
-    ],
+    },
   ]);
 });
 
 test("captures successful builds before the artifact cache is saved", (context) => {
   const result = lifecycle(context, true, 0, "hawk-fragments");
-  assert.deepEqual(
-    result.calls.map((call) => call[1]),
-    ["restore", "save"],
-  );
-  const directory = path.join(result.workspace, "build output", "hawk-fragments");
-  assert.deepEqual(result.calls.map((call) => call[4]), [directory, directory]);
+  const [restore, save] = result.calls;
+  const target = path.join(result.workspace, "build output");
+  assert.equal(restore.operation, "restore");
+  assert.equal(save.operation, "save");
+  assert.deepEqual(save.args, [
+    "--target-directory",
+    target,
+    "--extra-target-directory",
+    path.join(target, "hawk-fragments"),
+  ]);
+  assert.deepEqual(restore.args, [
+    path.join(target, "debug"),
+    path.join(target, "triple/profiling"),
+    ...save.args,
+  ]);
 });
 
 test("rejects extra directories outside the target or used by Cargo", (context) => {
-  assert.throws(() => lifecycle(context, true, 0, "../outside"), /single directory name/);
-  assert.throws(() => lifecycle(context, true, 0, "debug"), /separate from Cargo profiles/);
-  assert.throws(() => lifecycle(context, true, 0, "DEBUG"), /separate from Cargo profiles/);
+  assert.throws(
+    () => lifecycle(context, true, 0, "../outside"),
+    /single directory name/,
+  );
+  for (const name of ["debug", "DEBUG", "triple"]) {
+    assert.throws(
+      () => lifecycle(context, true, 0, name),
+      /separate from Cargo profiles/,
+    );
+  }
 });
 
 test("does not save metadata when restoration fails", (context) => {
@@ -149,58 +170,4 @@ test("does not save metadata when restoration fails", (context) => {
   assert.equal(result.status, 7);
   assert.equal(result.recorded, "");
   assert.equal(result.calls.length, 1);
-});
-
-test("Python invocation prefers uv and only falls back when it is absent", () => {
-  for (const [platform, fallback] of [
-    ["linux", "python3"],
-    ["win32", "python"],
-  ]) {
-    const calls = [];
-    const module = { exports: {} };
-    vm.runInNewContext(
-      fs.readFileSync(path.join(__dirname, "python.cjs"), "utf8"),
-      {
-        __dirname,
-        module,
-        process: { platform },
-        require: (name) =>
-          name === "node:child_process"
-            ? {
-                spawnSync(command, args, options) {
-                  calls.push({
-                    command,
-                    args: Array.from(args),
-                    options: { ...options },
-                  });
-                  return calls.length === 1
-                    ? { error: { code: "ENOENT" } }
-                    : { status: 0 };
-                },
-              }
-            : require(name),
-      },
-    );
-    assert.equal(
-      module.exports("workspace", "restore", "manifest", ["profile"]),
-      0,
-    );
-    assert.deepEqual(
-      calls.map((call) => call.command),
-      ["uv", fallback],
-    );
-    assert.deepEqual(calls[0].args.slice(0, 5), [
-      "run",
-      "--no-project",
-      "--no-config",
-      "--python",
-      ">=3.11",
-    ]);
-    assert.deepEqual(calls[1].args, [
-      path.join(__dirname, "inputs.py"),
-      "restore",
-      "manifest",
-      "profile",
-    ]);
-  }
 });

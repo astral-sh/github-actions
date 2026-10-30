@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { profileDirectories } = require("../runtime.cjs");
 
 const enabled = process.env.INPUT_ENABLED === "true";
 fs.appendFileSync(
@@ -9,14 +10,8 @@ fs.appendFileSync(
 
 if (enabled) {
   const workspace = path.resolve(process.env.INPUT_WORKSPACE);
-  const profiles = process.env.INPUT_PROFILE.split(/\r?\n/)
-    .map((profile) => profile.trim())
-    .filter(Boolean)
-    .map((profile) =>
-      path.resolve(workspace, process.env["INPUT_TARGET-DIRECTORY"], profile),
-    );
-  if (profiles.length === 0)
-    throw new Error("At least one build profile is required");
+  const target = path.resolve(workspace, process.env["INPUT_TARGET-DIRECTORY"]);
+  const profiles = profileDirectories(target, process.env.INPUT_PROFILE);
   const directory = fs.mkdtempSync(
     path.join(process.env.RUNNER_TEMP, "rust-workspace-cache-"),
   );
