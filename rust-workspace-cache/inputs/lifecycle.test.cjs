@@ -123,6 +123,7 @@ test("restores read-only hits without recording replacement metadata", (context)
         path.join(result.workspace, "build output/profiling"),
       ],
       null,
+      path.join(result.workspace, "build output"),
     ],
   ]);
 });
@@ -140,6 +141,7 @@ test("captures successful builds before the artifact cache is saved", (context) 
 test("rejects extra directories outside the target or used by Cargo", (context) => {
   assert.throws(() => lifecycle(context, true, 0, "../outside"), /single directory name/);
   assert.throws(() => lifecycle(context, true, 0, "debug"), /separate from Cargo profiles/);
+  assert.throws(() => lifecycle(context, true, 0, "DEBUG"), /separate from Cargo profiles/);
 });
 
 test("does not save metadata when restoration fails", (context) => {

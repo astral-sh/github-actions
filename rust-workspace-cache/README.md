@@ -94,12 +94,18 @@ tracked inputs or directory entries within a current build-script package
 invalidate that package's cached runs and their output directories in the selected
 profiles.
 
-The action does not compare the contents of Git metadata, symlinks, untracked
-files, or inputs outside these packages; Cargo's usual freshness rules still apply.
+The timestamp comparison covers tracked regular files in those packages.
+Cargo's usual freshness rules apply to inputs outside the timestamp snapshot.
 Enable `checksum-freshness` for Rust source reuse across fresh checkouts. Restore
 one artifact cache per workspace; overlapping workspace restores are rejected.
 
-The action adds `-build-inputs-v1` to `prefix-key` and caches the input metadata
+Cargo checksums cover files read by the previous build. Adding a second candidate
+for a Rust module can change compilation without changing any of those files.
+The action records Git file paths, file kinds, and symlink destinations. When
+that layout changes, it discards workspace fingerprints in the selected profiles
+so Cargo checks the new layout. Compiled third-party dependencies remain reusable.
+
+The action adds `-build-inputs-v2` to `prefix-key` and caches the input metadata
 alongside the Cargo artifacts. The cache entry is populated when saving is enabled
 and the job succeeds. Metadata is recorded only when a new artifact cache will be
 saved; exact hits and read-only jobs restore the snapshot when available.

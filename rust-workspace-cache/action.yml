@@ -49,7 +49,7 @@ runs:
       id: cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        prefix-key: ${{ inputs.prefix-key }}-build-inputs-v1
+        prefix-key: ${{ inputs.prefix-key }}-build-inputs-v2
         key: ${{ inputs.key }}
         workspaces: ${{ inputs.workspace }} -> ${{ inputs.target-directory }}
         cache-workspace-crates: "true"

@@ -18,17 +18,17 @@ if (name) {
   extra = path.join(target, name);
   if (
     profiles.some((profile) => {
-      const relative = path.relative(extra, profile);
+      const relative = path.relative(extra.toLowerCase(), profile.toLowerCase());
       return !path.isAbsolute(relative) && relative.split(path.sep)[0] !== "..";
     })
   )
     throw new Error("extra-target-directory must be separate from Cargo profiles");
 }
 const manifest = path.join(process.env.INPUT_DIRECTORY, "manifest.json");
-process.exitCode = run(workspace, "restore", manifest, profiles, extra);
+process.exitCode = run(workspace, "restore", manifest, profiles, extra, target);
 if (process.exitCode === 0 && process.env.INPUT_SAVE === "true") {
   fs.appendFileSync(
     process.env.GITHUB_STATE,
-    `inputs=${JSON.stringify({ workspace, manifest, extra })}\n`,
+    `inputs=${JSON.stringify({ workspace, manifest, extra, target })}\n`,
   );
 }
