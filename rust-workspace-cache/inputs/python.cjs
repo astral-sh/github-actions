@@ -1,13 +1,14 @@
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-module.exports = function run(workspace, operation, manifest, profiles = []) {
+module.exports = function run(workspace, operation, manifest, profiles = [], extra) {
   const args = [
     path.join(__dirname, "inputs.py"),
     operation,
     manifest,
     ...profiles,
   ];
+  if (extra) args.push("--extra-target-directory", extra);
   const options = { cwd: workspace, stdio: "inherit" };
   let result = spawnSync(
     "uv",

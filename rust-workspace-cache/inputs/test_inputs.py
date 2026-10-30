@@ -12,6 +12,28 @@ from pathlib import Path
 import inputs
 
 
+class ToolDirectoryTest(unittest.TestCase):
+    def test_restore_replaces_stale_files_with_the_saved_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            live = root / "target" / "tool-data"
+            staged = root / "cache" / "target-tool-data"
+            inputs.move_tool_directory(staged, live)
+            self.assertFalse(live.exists())
+
+            live.mkdir(parents=True)
+            (live / "graph").write_bytes(b"saved graph")
+            inputs.move_tool_directory(live, staged)
+            self.assertFalse(live.exists())
+
+            live.mkdir()
+            (live / "stale").touch()
+            inputs.move_tool_directory(staged, live)
+            self.assertEqual((live / "graph").read_bytes(), b"saved graph")
+            self.assertFalse((live / "stale").exists())
+            self.assertFalse(staged.exists())
+
+
 class CargoInputsTest(unittest.TestCase):
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory(prefix="cargo-inputs-")

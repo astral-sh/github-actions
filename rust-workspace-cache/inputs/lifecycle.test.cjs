@@ -16,7 +16,7 @@ function fixture(context) {
   return { directory, workspace };
 }
 
-function prepare(directory, workspace, job = "1") {
+function prepare(directory, workspace, job = "1", extra = "") {
   const output = path.join(directory, "output");
   fs.writeFileSync(output, "");
   const result = spawnSync(
@@ -26,6 +26,7 @@ function prepare(directory, workspace, job = "1") {
       env: {
         ...process.env,
         INPUT_WORKSPACE: workspace,
+        "INPUT_EXTRA-TARGET-DIRECTORY": extra,
         RUNNER_TEMP: directory,
         GITHUB_OUTPUT: output,
         GITHUB_RUN_ID: job,
@@ -55,6 +56,9 @@ test("isolates metadata from source inputs and clears leftovers between jobs", (
   assert.equal(next.status, 0, next.stderr);
   assert.equal(next.directory, first.directory);
   assert.deepEqual(fs.readdirSync(next.directory), []);
+  const withExtra = prepare(directory, workspace, "3", "hawk-fragments");
+  assert.equal(withExtra.status, 0, withExtra.stderr);
+  assert.notEqual(withExtra.directory, first.directory);
 });
 
 test("rejects overlapping snapshots but permits independent workspaces", (context) => {
@@ -69,7 +73,7 @@ test("rejects overlapping snapshots but permits independent workspaces", (contex
   assert.equal(prepare(directory, adjacent).status, 0);
 });
 
-function lifecycle(context, save, status = 0) {
+function lifecycle(context, save, status = 0, extra = "") {
   const { directory, workspace } = fixture(context);
   const state = path.join(directory, "state");
   fs.writeFileSync(state, "");
@@ -79,6 +83,7 @@ function lifecycle(context, save, status = 0) {
       INPUT_WORKSPACE: workspace,
       INPUT_PROFILE: "debug\r\n profiling\r\n",
       "INPUT_TARGET-DIRECTORY": "build output",
+      "INPUT_EXTRA-TARGET-DIRECTORY": extra,
       INPUT_DIRECTORY: directory,
       INPUT_SAVE: String(save),
       GITHUB_STATE: state,
@@ -117,16 +122,24 @@ test("restores read-only hits without recording replacement metadata", (context)
         path.join(result.workspace, "build output/debug"),
         path.join(result.workspace, "build output/profiling"),
       ],
+      null,
     ],
   ]);
 });
 
 test("captures successful builds before the artifact cache is saved", (context) => {
-  const result = lifecycle(context, true);
+  const result = lifecycle(context, true, 0, "hawk-fragments");
   assert.deepEqual(
     result.calls.map((call) => call[1]),
     ["restore", "save"],
   );
+  const directory = path.join(result.workspace, "build output", "hawk-fragments");
+  assert.deepEqual(result.calls.map((call) => call[4]), [directory, directory]);
+});
+
+test("rejects extra directories outside the target or used by Cargo", (context) => {
+  assert.throws(() => lifecycle(context, true, 0, "../outside"), /single directory name/);
+  assert.throws(() => lifecycle(context, true, 0, "debug"), /separate from Cargo profiles/);
 });
 
 test("does not save metadata when restoration fails", (context) => {

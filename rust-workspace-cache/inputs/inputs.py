@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -187,11 +188,38 @@ def restore(root: Path, saved: dict, profiles: list[Path]) -> dict[str, int]:
     }
 
 
+def move_tool_directory(source: Path, destination: Path) -> None:
+    try:
+        mode = source.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISDIR(mode):
+        raise ValueError(f"Expected a tool-owned directory at {source}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        # The target and RUNNER_TEMP can be on different volumes. Finish the
+        # transfer before replacing the destination, without following its links.
+        incoming = Path(temporary) / "incoming"
+        shutil.move(source, incoming)
+        previous = Path(temporary) / "previous"
+        try:
+            if os.path.lexists(destination):
+                destination.rename(previous)
+            incoming.rename(destination)
+        except OSError:
+            if os.path.lexists(previous):
+                previous.rename(destination)
+            shutil.move(incoming, source)
+            raise
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=["save", "restore"])
     parser.add_argument("manifest", type=Path)
     parser.add_argument("profiles", type=Path, nargs="*")
+    parser.add_argument("--extra-target-directory", type=Path)
     args = parser.parse_args()
     start = time.monotonic()
     if args.operation == "save":
@@ -207,6 +235,12 @@ def main() -> None:
         )
     else:
         result = {"no_manifest": True}
+    if extra := args.extra_target_directory:
+        staged = args.manifest.with_name(f"target-{extra.name}")
+        if args.operation == "save":
+            move_tool_directory(extra, staged)
+        else:
+            move_tool_directory(staged, extra)
     print(
         json.dumps(
             result | {"operation": args.operation, "seconds": time.monotonic() - start}
