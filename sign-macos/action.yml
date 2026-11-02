@@ -1,5 +1,5 @@
 name: "Sign and notarize macOS executables"
-description: "Sign all target directories through signer-service and wait for Apple notarization."
+description: "Sign all target directories through the selected PKCS#11 backend and wait for Apple notarization."
 
 inputs:
   unsigned-directory:
@@ -36,20 +36,23 @@ inputs:
     description: "SHA-256 digest of the rcodesign executable."
     default: "e4829d3c3c38cd388566d3ba9dec4735def5bc3a1f3e8dbf29b586771cd7c6d3"
   component-pkcs11-blob:
-    description: "Blob containing the Linux x86_64 PKCS#11 library with the signer-service backend."
+    description: "Blob containing the Linux x86_64 PKCS#11 library supporting the selected backend."
     required: true
   component-pkcs11-sha256:
     description: "SHA-256 digest of the PKCS#11 library."
     required: true
+  signing-backend:
+    description: "PKCS#11 signing backend: azure or signer-service."
+    default: "azure"
   signer-service-endpoint:
-    description: "Signer-service HTTPS origin, also used as the GitHub OIDC audience."
-    required: true
+    description: "Signer-service HTTPS origin and GitHub OIDC audience. Required for signer-service."
+    default: ""
   signer-service-purpose:
-    description: "Signer-service key purpose authorized for this release workflow."
-    required: true
+    description: "Authorized signer-service key purpose. Required for signer-service."
+    default: ""
   signer-service-key-id:
-    description: "Exact signer-service key ID matching the pinned signing certificate."
-    required: true
+    description: "Exact key ID matching the pinned certificate. Required for signer-service."
+    default: ""
   azure-keyvault-name:
     description: "Azure Key Vault containing the signing certificate and notarization key."
     required: true
@@ -110,6 +113,8 @@ runs:
         COMPONENT_RCODESIGN_SHA256: ${{ inputs.component-rcodesign-sha256 }}
         COMPONENT_PKCS11_BLOB: ${{ inputs.component-pkcs11-blob }}
         COMPONENT_PKCS11_SHA256: ${{ inputs.component-pkcs11-sha256 }}
+        AZURE_CREDENTIAL_KIND: azurecli
+        SIGNING_BACKEND: ${{ inputs.signing-backend }}
         SIGNER_SERVICE_ENDPOINT: ${{ inputs.signer-service-endpoint }}
         SIGNER_SERVICE_PURPOSE: ${{ inputs.signer-service-purpose }}
         SIGNER_SERVICE_KEY_ID: ${{ inputs.signer-service-key-id }}

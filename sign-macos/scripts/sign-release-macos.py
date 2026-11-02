@@ -6,7 +6,7 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Sign macOS executables from all target directories with signer-service.
+"""Sign macOS executables with the selected PKCS#11 backend.
 
 The input contains one directory per target, each holding its executables.
 The new output directory preserves this layout and includes the signing
@@ -103,6 +103,10 @@ def certificate_sha256(path: Path) -> str:
 
 def sign_binaries(unsigned: Path, signed: Path) -> None:
     """Download the pinned components and certificate once, then sign every target."""
+    backend = os.environ.get("SIGNING_BACKEND", "azure")
+    if backend not in ("azure", "signer-service"):
+        raise ValueError(f"Unsupported signing backend: {backend}")
+
     required = (
         "STORAGE_ACCOUNT",
         "STORAGE_CONTAINER",
@@ -110,14 +114,17 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         "COMPONENT_RCODESIGN_SHA256",
         "COMPONENT_PKCS11_BLOB",
         "COMPONENT_PKCS11_SHA256",
-        "SIGNER_SERVICE_ENDPOINT",
-        "SIGNER_SERVICE_PURPOSE",
-        "SIGNER_SERVICE_KEY_ID",
         "AZURE_KEYVAULT_NAME",
         "AZURE_KEYVAULT_KEY_VERSION",
         "KEY_NAME",
         "CERTIFICATE_SHA256",
     )
+    if backend == "signer-service":
+        required += (
+            "SIGNER_SERVICE_ENDPOINT",
+            "SIGNER_SERVICE_PURPOSE",
+            "SIGNER_SERVICE_KEY_ID",
+        )
     for name in required:
         if not os.environ.get(name):
             raise ValueError(f"Missing signing configuration: {name}")
@@ -156,6 +163,13 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         )
         if certificate_sha256(certificate) != os.environ["CERTIFICATE_SHA256"].lower():
             raise ValueError("Signing certificate SHA-256 mismatch")
+
+        signing_env = {**os.environ, "AKV_PKCS11_BACKEND": backend}
+        if backend == "signer-service":
+            signing_env.update(
+                SIGNER_SERVICE_KEY_LABEL=os.environ["KEY_NAME"],
+                SIGNER_SERVICE_CERTIFICATE_FILE=str(certificate),
+            )
 
         signed.mkdir()
         for target in sorted(unsigned.iterdir()):
@@ -200,12 +214,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             output,
                         ],
                         check=True,
-                        env={
-                            **os.environ,
-                            "AKV_PKCS11_BACKEND": "signer-service",
-                            "SIGNER_SERVICE_KEY_LABEL": os.environ["KEY_NAME"],
-                            "SIGNER_SERVICE_CERTIFICATE_FILE": str(certificate),
-                        },
+                        env=signing_env,
                     )
                 except subprocess.CalledProcessError:
                     raise RuntimeError(
@@ -214,7 +223,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
 
 def main() -> None:
-    """Sign using the signer-service settings from the protected release job."""
+    """Sign using the selected backend and settings from the protected release job."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("unsigned", type=Path)
     parser.add_argument("signed", type=Path)
