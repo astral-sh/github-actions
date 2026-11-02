@@ -6,7 +6,7 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Sign macOS executables from all target directories with Azure Key Vault.
+"""Sign macOS executables from all target directories with signer-service.
 
 The input contains one directory per target, each holding its executables.
 The new output directory preserves this layout and includes the signing
@@ -110,6 +110,9 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         "COMPONENT_RCODESIGN_SHA256",
         "COMPONENT_PKCS11_BLOB",
         "COMPONENT_PKCS11_SHA256",
+        "SIGNER_SERVICE_ENDPOINT",
+        "SIGNER_SERVICE_PURPOSE",
+        "SIGNER_SERVICE_KEY_ID",
         "AZURE_KEYVAULT_NAME",
         "AZURE_KEYVAULT_KEY_VERSION",
         "KEY_NAME",
@@ -197,6 +200,12 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             output,
                         ],
                         check=True,
+                        env={
+                            **os.environ,
+                            "AKV_PKCS11_BACKEND": "signer-service",
+                            "SIGNER_SERVICE_KEY_LABEL": os.environ["KEY_NAME"],
+                            "SIGNER_SERVICE_CERTIFICATE_FILE": str(certificate),
+                        },
                     )
                 except subprocess.CalledProcessError:
                     raise RuntimeError(
@@ -205,7 +214,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
 
 def main() -> None:
-    """Sign using the Azure identity and settings from the protected release job."""
+    """Sign using the signer-service settings from the protected release job."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("unsigned", type=Path)
     parser.add_argument("signed", type=Path)
