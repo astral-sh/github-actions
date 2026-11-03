@@ -28,6 +28,34 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
     steps:
+      - name: Record native macOS revocation state
+        shell: bash
+        continue-on-error: true
+        run: |
+          db=/private/var/protected/trustd/valid.sqlite3
+          sudo -n /usr/bin/stat -f 'trustd DB modified %Sm' -t '%Y-%m-%d %H:%M:%S %z' "$db" || true
+          sudo -n /usr/bin/sqlite3 -readonly -header -column "$db" \
+            "SELECT key, ival FROM admin WHERE key IN ('generation', 'version');" || true
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          base=https://raw.githubusercontent.com/galadran/we-have-a-problem.com/60bbfc8882b15a83756fe4e70538ef12175562d4/chains/regular
+          /usr/bin/curl -qfsSL --max-time 20 \
+            "$base/dv-g3b-emudhra.we-have-a-problem.com.pem" -o "$tmp/chain.pem"
+
+          # Verify the intermediate and its issuer independently of the leaf and CT.
+          awk -v dir="$tmp" '
+            /^-----BEGIN CERTIFICATE-----$/ { ++n }
+            n == 2 || n == 3 { print > (dir "/cert" n ".pem") }
+          ' "$tmp/chain.pem"
+          test -s "$tmp/cert2.pem"
+          test -s "$tmp/cert3.pem"
+
+          status=0
+          /usr/bin/security verify-cert -v -L -R offline -p basic -l \
+            -c "$tmp/cert2.pem" -c "$tmp/cert3.pem" || status=$?
+          echo "Offline verification exit status: $status"
+
       - uses: $/demudhra
 
       # Apple's curl and Git use the system CA bundle patched by the action.
