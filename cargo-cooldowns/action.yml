@@ -1,0 +1,53 @@
+name: "Check Cargo dependency cooldowns"
+description: "Check the publication age of crates in tracked Cargo.lock files."
+
+inputs:
+  working-directory:
+    description: "Directory containing the tracked Cargo.lock files to check."
+    default: "."
+  policy:
+    description: "TOML policy path relative to the working directory. Defaults to seven days with no exclusions."
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        # renovate: datasource=github-release-attachments depName=astral-sh/uv
+        version: "0.13.6"
+        checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
+        enable-cache: false
+
+    - name: Restore crate publication times
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/cargo-cooldowns"
+        workflow=${GITHUB_WORKFLOW_REF%%@*}
+        if run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "${workflow##*/}" \
+          --branch "$DEFAULT_BRANCH" --event push --status success --limit 1 \
+          --json databaseId --jq '.[0].databaseId // empty') && [[ -n "$run_id" ]]; then
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name cargo-publication-times --dir "$RUNNER_TEMP/cargo-cooldowns" ||
+            echo "No publication times available from run $run_id; checking crates.io."
+        fi
+
+    - name: Check Cargo dependency cooldowns
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        POLICY: ${{ inputs.policy || format('{0}/default-policy.toml', github.action_path) }}
+      run: uv run --locked --script "$GITHUB_ACTION_PATH/check_cargo_cooldowns.py" --policy "$POLICY" --cache "$RUNNER_TEMP/cargo-cooldowns/cargo-publication-times.json"
+
+    - name: Store crate publication times
+      if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: cargo-publication-times
+        path: ${{ runner.temp }}/cargo-cooldowns/cargo-publication-times.json
+        retention-days: 7
+        overwrite: true
