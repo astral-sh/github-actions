@@ -4,7 +4,7 @@
 
 # Adapted from https://github.com/curl/curl/blob/f0da5390ad9d380807cc83e600196809df8bb96b/.github/actions/macos-fix-certs/action.yml
 name: "demudhra"
-description: "Remove roots that trust compromised eMudhra intermediates from macOS runner CA bundles."
+description: "Block compromised eMudhra TLS intermediates on macOS runners."
 
 runs:
   using: "composite"
@@ -54,3 +54,16 @@ runs:
         ' "$brew_bundle" "${subjects[@]}" > "$tmp"
         grep -q '^-----BEGIN CERTIFICATE-----' "$tmp"
         install -C -m 0644 "$tmp" "$brew_bundle"
+
+    - name: "Deny affected certificates in the macOS System keychain"
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        # The native trust path can still accept chains after the CA bundles are patched.
+        # The pinned TLS certificates match https://support.apple.com/en-us/149555#blocked-certificates
+        # and come from https://github.com/galadran/we-have-a-problem.com/blob/8ee244a412a1485b54224f319a16a1e8dfd4cffa/impacted-intermediates.json.
+        for cert in "$ACTION_PATH"/certificates/*.pem; do
+          sudo -n /usr/bin/security add-trusted-cert -d -r deny -k /Library/Keychains/System.keychain "$cert"
+        done
