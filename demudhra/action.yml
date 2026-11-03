@@ -1,0 +1,56 @@
+# Copyright (C) Viktor Szakats
+#
+# SPDX-License-Identifier: curl
+
+# Adapted from https://github.com/curl/curl/blob/f0da5390ad9d380807cc83e600196809df8bb96b/.github/actions/macos-fix-certs/action.yml
+name: "demudhra"
+description: "Remove roots that trust compromised eMudhra intermediates from macOS runner CA bundles."
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Patch macOS CA bundles"
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        # https://emudhra.we-have-a-problem.com/#macos-curl
+        subjects=(
+          '/C=IN/OU=emSign PKI/O=eMudhra Technologies Limited/CN=emSign ECC Root CA - G3'
+          '/C=US/OU=emSign PKI/O=eMudhra Inc/CN=emSign ECC Root CA - C3'
+          '/C=US/OU=emSign PKI/O=eMudhra Inc/CN=emSign Root CA - C1'
+          '/C=GB/ST=Greater Manchester/L=Salford/O=Comodo CA Limited/CN=AAA Certificate Services'
+        )
+
+        tmp="$(mktemp)"
+        trap 'rm -f "$tmp"' EXIT
+
+        BLOCKED_SUBJECTS="$(printf '%s\n' "${subjects[@]}")" awk '
+          BEGIN {
+            count = split(ENVIRON["BLOCKED_SUBJECTS"], names, "\n")
+            for (i = 1; i <= count; i++) blocked["=== " names[i]] = 1
+          }
+          /^(===|###) / { skip = ($0 in blocked) }
+          !skip
+        ' /etc/ssl/cert.pem > "$tmp"
+        grep -q '^-----BEGIN CERTIFICATE-----' "$tmp"
+        sudo install -C -m 0644 -o root -g wheel "$tmp" /etc/ssl/cert.pem
+
+        if ! command -v brew >/dev/null; then
+          exit 0
+        fi
+        brew_bundle="$(brew --prefix)/etc/ca-certificates/cert.pem"
+        if [[ ! -f "$brew_bundle" ]]; then
+          exit 0
+        fi
+
+        # Homebrew stores PEM blocks without the macOS subject headings.
+        /usr/bin/ruby -ropenssl -e '
+          bundle, *blocked = ARGV
+          pem_pattern = /^-----BEGIN CERTIFICATE-----\r?\n.*?^-----END CERTIFICATE-----\r?$\n?/m
+          print File.binread(bundle).gsub(pem_pattern) { |pem|
+            certificate = OpenSSL::X509::Certificate.new(pem)
+            blocked.include?(certificate.subject.to_s) ? "" : pem
+          }
+        ' "$brew_bundle" "${subjects[@]}" > "$tmp"
+        grep -q '^-----BEGIN CERTIFICATE-----' "$tmp"
+        install -C -m 0644 "$tmp" "$brew_bundle"

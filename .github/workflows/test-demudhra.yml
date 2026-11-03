@@ -1,0 +1,62 @@
+name: Test demudhra action
+
+on:
+  pull_request:
+    paths:
+      - demudhra/**
+      - .github/workflows/test-demudhra.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15
+          - macos-15-intel
+          - macos-26
+          - macos-26-intel
+          - xcode-27 # macOS 27 arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: $/demudhra
+
+      # Apple's curl and Git use the system CA bundle patched by the action.
+      - name: Check curl rejects the test certificates
+        shell: bash
+        run: |
+          for url in \
+            https://dv-g3b-emudhra.we-have-a-problem.com/ \
+            https://dv-g3b-aaa-emudhra.we-have-a-problem.com/; do
+            status=0
+            /usr/bin/curl --head --max-time 20 "$url" || status=$?
+            if [[ "$status" != 60 ]]; then
+              echo "::error::Expected curl certificate verification failure (exit 60) for $url, got exit $status"
+              exit 1
+            fi
+          done
+
+      - name: Check Git rejects the test certificate
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+          LC_ALL: C
+        run: |
+          if output=$(/usr/bin/git ls-remote https://git-emudhra.we-have-a-problem.com/check.git 2>&1); then
+            echo "::error::Expected git ls-remote to fail certificate verification"
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          if ! grep -qiE 'SSL certificate problem|certificate verify failed|certificate verification failed' <<< "$output"; then
+            echo "::error::git ls-remote failed without a certificate verification error"
+            exit 1
+          fi
