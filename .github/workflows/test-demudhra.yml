@@ -1,0 +1,97 @@
+name: Test demudhra action
+
+on:
+  pull_request:
+    paths:
+      - demudhra/**
+      - .github/workflows/test-demudhra.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15
+          - macos-15-intel
+          - macos-26
+          - macos-26-intel
+          - xcode-27 # macOS 27 arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - name: Record native macOS revocation state
+        shell: bash
+        continue-on-error: true
+        run: |
+          db=/private/var/protected/trustd/valid.sqlite3
+          sudo -n /usr/bin/stat -f 'trustd DB modified %Sm' -t '%Y-%m-%d %H:%M:%S %z' "$db" || true
+          sudo -n /usr/bin/sqlite3 -readonly -header -column "$db" \
+            "SELECT key, ival FROM admin WHERE key IN ('generation', 'version');" || true
+
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          base=https://raw.githubusercontent.com/galadran/we-have-a-problem.com/60bbfc8882b15a83756fe4e70538ef12175562d4/chains/regular
+          /usr/bin/curl -qfsSL --max-time 20 \
+            "$base/dv-g3b-emudhra.we-have-a-problem.com.pem" -o "$tmp/chain.pem"
+
+          # Verify the intermediate and its issuer independently of the leaf and CT.
+          awk -v dir="$tmp" '
+            /^-----BEGIN CERTIFICATE-----$/ { ++n }
+            n == 2 || n == 3 { print > (dir "/cert" n ".pem") }
+          ' "$tmp/chain.pem"
+          test -s "$tmp/cert2.pem"
+          test -s "$tmp/cert3.pem"
+
+          status=0
+          /usr/bin/security verify-cert -v -L -R offline -p basic -l \
+            -c "$tmp/cert2.pem" -c "$tmp/cert3.pem" || status=$?
+          echo "Offline verification exit status: $status"
+
+      - name: Record Homebrew package versions
+        shell: bash
+        continue-on-error: true
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew info curl git ca-certificates
+
+      - uses: $/demudhra
+
+      # Apple's curl and Git use the system CA bundle patched by the action.
+      - name: Check curl rejects the test certificates
+        shell: bash
+        run: |
+          for url in \
+            https://dv-g3b-emudhra.we-have-a-problem.com/ \
+            https://dv-g3b-aaa-emudhra.we-have-a-problem.com/; do
+            status=0
+            /usr/bin/curl --head --max-time 20 "$url" || status=$?
+            if [[ "$status" != 60 ]]; then
+              echo "::error::Expected curl certificate verification failure (exit 60) for $url, got exit $status"
+              exit 1
+            fi
+          done
+
+      - name: Check Git rejects the test certificate
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+          LC_ALL: C
+        run: |
+          if output=$(/usr/bin/git ls-remote https://git-emudhra.we-have-a-problem.com/check.git 2>&1); then
+            echo "::error::Expected git ls-remote to fail certificate verification"
+            exit 1
+          fi
+          printf '%s\n' "$output"
+          if ! grep -qiE 'SSL certificate problem|certificate verify failed|certificate verification failed' <<< "$output"; then
+            echo "::error::git ls-remote failed without a certificate verification error"
+            exit 1
+          fi
