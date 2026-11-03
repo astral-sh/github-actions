@@ -56,6 +56,13 @@ jobs:
             -c "$tmp/cert2.pem" -c "$tmp/cert3.pem" || status=$?
           echo "Offline verification exit status: $status"
 
+      - name: Record Homebrew package versions
+        shell: bash
+        continue-on-error: true
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew info curl git ca-certificates
+
       - uses: $/demudhra
 
       # Apple's curl and Git use the system CA bundle patched by the action.
