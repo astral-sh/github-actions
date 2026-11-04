@@ -20,6 +20,9 @@ inputs:
     description: "Directory containing cargo-dist GitHub release archives."
     required: false
     default: "github-archives"
+  runners:
+    description: "Resolved JSON runner map from select-runners. Defaults to the catalog's preferred candidates."
+    required: false
 
 outputs:
   targets:
@@ -54,4 +57,5 @@ runs:
         RELEASE_WORKSPACE: ${{ inputs.workspace }}
         RELEASE_WHEELS_DIRECTORY: ${{ inputs.wheels-directory }}
         RELEASE_GITHUB_ARCHIVES_DIRECTORY: ${{ inputs.github-archives-directory }}
+        RELEASE_RUNNERS: ${{ inputs.runners }}
       run: uv run --locked "$ACTION_PATH/plan.py" >> "$GITHUB_OUTPUT"
