@@ -9,6 +9,10 @@ on:
         description: "JSON array of Cargo workspace directories to vet"
         type: string
         required: true
+      workspace-names:
+        description: "JSON object mapping workspace directories to job display names"
+        type: string
+        default: "{}"
       uv-version:
         description: "uv version used to install Cargo Vet"
         type: string
@@ -18,7 +22,7 @@ permissions: {}
 
 jobs:
   vet:
-    name: "Cargo Vet (${{ matrix.workspace }})"
+    name: ${{ fromJSON(inputs.workspace-names)[matrix.workspace] || format('Cargo Vet ({0})', matrix.workspace) }}
     timeout-minutes: 10
     runs-on: ${{ inputs.runner }}
     strategy:
