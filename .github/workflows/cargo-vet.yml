@@ -22,7 +22,7 @@ permissions: {}
 
 jobs:
   vet:
-    name: ${{ fromJSON(inputs.workspace-names)[matrix.workspace] || format('Cargo Vet ({0})', matrix.workspace) }}
+    name: ${{ fromJSON(inputs.workspace-names)[matrix.workspace] || format('cargo vet in ({0})', matrix.workspace) }}
     timeout-minutes: 10
     runs-on: ${{ inputs.runner }}
     strategy:
