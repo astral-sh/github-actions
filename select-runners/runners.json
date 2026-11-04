@@ -1,60 +1,145 @@
 {
-  "ubuntu-x86_64-2": [
-    { "label": "github-ubuntu-24.04-x86_64-2", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
+  "github-standard": [
+    "ubuntu-slim",
+    "ubuntu-24.04",
+    "ubuntu-24.04-arm",
+    "macos-15",
+    "windows-2025",
+    "windows-11-arm"
   ],
-  "ubuntu-x86_64-2-slim": [
-    { "label": "github-ubuntu-24.04-x86_64-2", "free": false },
-    { "label": "ubuntu-slim", "free": true }
+  "github-larger": [
+    "github-ubuntu-24.04-x86_64-2",
+    "github-ubuntu-24.04-x86_64-4",
+    "github-ubuntu-24.04-x86_64-8",
+    "github-ubuntu-24.04-x86_64-16",
+    "github-ubuntu-24.04-x86_64-32",
+    "github-ubuntu-24.04-x86_64-64",
+    "github-ubuntu-24.04-x86_64-96",
+    "github-ubuntu-24.04-aarch64-2",
+    "github-ubuntu-24.04-aarch64-4",
+    "github-ubuntu-24.04-aarch64-8",
+    "github-ubuntu-24.04-aarch64-16",
+    "github-ubuntu-24.04-aarch64-32",
+    "github-ubuntu-24.04-aarch64-64",
+    "github-windows-2025-x86_64-4",
+    "github-windows-2025-x86_64-8",
+    "github-windows-2025-x86_64-16",
+    "github-windows-2025-x86_64-32",
+    "github-windows-2025-x86_64-64",
+    "github-windows-2025-x86_64-96",
+    "github-windows-2022-x86_64-8",
+    "github-windows-2022-x86_64-16",
+    "github-windows-2022-x86_64-32",
+    "github-windows-2022-x86_64-64",
+    "github-windows-2022-x86_64-96",
+    "github-windows-11-aarch64-4",
+    "github-windows-11-aarch64-8",
+    "github-windows-11-aarch64-16",
+    "github-windows-11-aarch64-32",
+    "github-windows-11-aarch64-64",
+    "github-windows-11-vs2022-aarch64-8",
+    "github-windows-11-vs2022-aarch64-16",
+    "github-windows-11-vs2022-aarch64-32",
+    "github-windows-11-vs2022-aarch64-64",
+    "github-windows-11-vs2026-aarch64-8",
+    "github-windows-11-vs2026-aarch64-16",
+    "github-windows-11-vs2026-aarch64-32",
+    "github-windows-11-vs2026-aarch64-64",
+    "github-windows-11-preview-aarch64-8",
+    "ubuntu-latest-large",
+    "ubuntu-latest-xlarge",
+    "windows-latest-large",
+    "windows-latest-xlarge",
+    "windows-latest-xxlarge",
+    "macos-14-large",
+    "macos-14-xlarge",
+    "macos-15-large",
+    "macos-15-xlarge",
+    "macos-26-large",
+    "macos-26-xlarge",
+    "macos-latest-large",
+    "macos-latest-xlarge"
   ],
-  "ubuntu-x86_64-4": [
-    { "label": "depot-ubuntu-24.04-4", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
+  "namespace": [
+    "namespace-profile-default",
+    "namespace-profile-default-arm64",
+    "namespace-profile-macos-15",
+    "namespace-profile-macos-15-4x7",
+    "namespace-profile-macos-15-6x14",
+    "namespace-profile-ubuntu-22-04-arm-4",
+    "namespace-profile-ubuntu-22-04-arm-4-apple-silicon",
+    "namespace-profile-ubuntu-24-04",
+    "namespace-profile-ubuntu-24-04-4",
+    "namespace-profile-ubuntu-24-04-8",
+    "namespace-profile-ubuntu-24-04-16",
+    "namespace-profile-ubuntu-latest-4",
+    "namespace-profile-windows-2022-x86-64-4",
+    "namespace-profile-windows-2022-x86-64-4x8",
+    "namespace-profile-windows-2022-x86-64-8",
+    "namespace-profile-windows-2022-x86-64-8x16",
+    "namespace-profile-windows-2022-x86-64-16",
+    "namespace-profile-windows-2022-x86-64-16x32",
+    "namespace-profile-windows-2022-x86-64-32x64"
   ],
-  "ubuntu-x86_64-4-github": [
-    { "label": "github-ubuntu-24.04-x86_64-4", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
+  "depot": [
+    "depot-macos-14",
+    "depot-macos-15",
+    "depot-macos-26",
+    "depot-macos-latest",
+    "depot-ubuntu-22.04",
+    "depot-ubuntu-22.04-4",
+    "depot-ubuntu-22.04-8",
+    "depot-ubuntu-22.04-16",
+    "depot-ubuntu-22.04-32",
+    "depot-ubuntu-22.04-64",
+    "depot-ubuntu-22.04-arm",
+    "depot-ubuntu-22.04-arm-4",
+    "depot-ubuntu-22.04-arm-8",
+    "depot-ubuntu-22.04-arm-16",
+    "depot-ubuntu-22.04-arm-32",
+    "depot-ubuntu-22.04-arm-64",
+    "depot-ubuntu-24.04",
+    "depot-ubuntu-24.04-4",
+    "depot-ubuntu-24.04-8",
+    "depot-ubuntu-24.04-16",
+    "depot-ubuntu-24.04-32",
+    "depot-ubuntu-24.04-64",
+    "depot-ubuntu-24.04-arm",
+    "depot-ubuntu-24.04-arm-4",
+    "depot-ubuntu-24.04-arm-8",
+    "depot-ubuntu-24.04-arm-16",
+    "depot-ubuntu-24.04-arm-32",
+    "depot-ubuntu-24.04-arm-64",
+    "depot-ubuntu-latest",
+    "depot-ubuntu-latest-4",
+    "depot-ubuntu-latest-8",
+    "depot-ubuntu-latest-16",
+    "depot-ubuntu-latest-32",
+    "depot-ubuntu-latest-64",
+    "depot-ubuntu-latest-arm",
+    "depot-ubuntu-latest-arm-4",
+    "depot-ubuntu-latest-arm-8",
+    "depot-ubuntu-latest-arm-16",
+    "depot-ubuntu-latest-arm-32",
+    "depot-ubuntu-latest-arm-64",
+    "depot-windows-2022",
+    "depot-windows-2022-4",
+    "depot-windows-2022-8",
+    "depot-windows-2022-16",
+    "depot-windows-2022-32",
+    "depot-windows-2022-64",
+    "depot-windows-2025",
+    "depot-windows-2025-4",
+    "depot-windows-2025-8",
+    "depot-windows-2025-16",
+    "depot-windows-2025-32",
+    "depot-windows-2025-64",
+    "depot-windows-latest",
+    "depot-windows-latest-4",
+    "depot-windows-latest-8",
+    "depot-windows-latest-16",
+    "depot-windows-latest-32",
+    "depot-windows-latest-64"
   ],
-  "ubuntu-x86_64-8": [
-    { "label": "depot-ubuntu-24.04-8", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
-  ],
-  "ubuntu-x86_64-8-github": [
-    { "label": "github-ubuntu-24.04-x86_64-8", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
-  ],
-  "ubuntu-x86_64-16": [
-    { "label": "depot-ubuntu-24.04-16", "free": false },
-    { "label": "ubuntu-24.04", "free": true }
-  ],
-  "ubuntu-aarch64-2": [
-    { "label": "github-ubuntu-24.04-aarch64-2", "free": false },
-    { "label": "ubuntu-24.04-arm", "free": true }
-  ],
-  "ubuntu-aarch64-4": [
-    { "label": "github-ubuntu-24.04-aarch64-4", "free": false },
-    { "label": "ubuntu-24.04-arm", "free": true }
-  ],
-  "ubuntu-aarch64-pgo": [
-    { "label": "depot-ubuntu-24.04-arm-16", "free": false }
-  ],
-  "ubuntu-x86_64-codspeed": [
-    { "label": "codspeed-macro-x64-ryzen-9950x-ubuntu-24-04", "free": false }
-  ],
-  "macos-aarch64-8": [
-    { "label": "namespace-profile-macos-15", "free": false },
-    { "label": "macos-15", "free": true }
-  ],
-  "windows-x86_64-4": [
-    { "label": "namespace-profile-windows-2022-x86-64-4", "free": false },
-    { "label": "windows-2025", "free": true }
-  ],
-  "windows-x86_64-16": [
-    { "label": "namespace-profile-windows-2022-x86-64-16x32", "free": false },
-    { "label": "windows-2025", "free": true }
-  ],
-  "windows-aarch64-8": [
-    { "label": "github-windows-11-aarch64-8", "free": false },
-    { "label": "windows-11-arm", "free": true }
-  ]
+  "codspeed": ["codspeed-macro-x64-ryzen-9950x-ubuntu-24-04"]
 }

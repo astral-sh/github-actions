@@ -35,11 +35,13 @@ jobs:
         id: runners
         with:
           free-only: "true"
-          required: ubuntu-x86_64-16 ubuntu-aarch64-4 windows-x86_64-16
+          roles: |
+            {"linux-smoke": ["namespace-profile-ubuntu-24-04-8", "ubuntu-24.04"]}
+          required: linux-smoke ubuntu-x86_64-16 ubuntu-aarch64-4 windows-x86_64-16
 
   selected-runner:
     needs: test
-    runs-on: ${{ fromJSON(needs.test.outputs.runners).ubuntu-x86_64-16 }}
+    runs-on: ${{ fromJSON(needs.test.outputs.runners).linux-smoke }}
     timeout-minutes: 5
     steps:
       - run: echo "Scheduled on the selected free runner"

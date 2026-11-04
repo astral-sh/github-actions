@@ -5,6 +5,9 @@ inputs:
   free-only:
     description: "Select only free candidates. Defaults to true outside the astral-sh organization."
     required: false
+  roles:
+    description: "JSON object adding or replacing roles with ordered lists of catalog labels."
+    required: false
   required:
     description: "Runner roles that must be available, separated by whitespace."
     required: false

@@ -1,58 +1,11 @@
 "use strict";
 
 const fs = require("node:fs");
-const path = require("node:path");
+const inventory = require("./runners.json");
+const defaultRoles = require("./roles.json");
 
-function validateCatalog(catalog) {
-  if (
-    !catalog ||
-    typeof catalog !== "object" ||
-    Array.isArray(catalog) ||
-    Object.keys(catalog).length === 0
-  ) {
-    throw new Error("Runner catalog must be a non-empty object");
-  }
-
-  for (const [role, candidates] of Object.entries(catalog)) {
-    if (!/^[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*$/.test(role)) {
-      throw new Error(`Invalid runner role: ${role}`);
-    }
-    if (!Array.isArray(candidates) || candidates.length === 0) {
-      throw new Error(`Runner role ${role} must have at least one candidate`);
-    }
-    const labels = new Set();
-    for (const candidate of candidates) {
-      if (
-        !candidate ||
-        typeof candidate !== "object" ||
-        Array.isArray(candidate) ||
-        Object.keys(candidate).sort().join(",") !== "free,label"
-      ) {
-        throw new Error(
-          `Runner candidates for ${role} must contain label and free`,
-        );
-      }
-      if (
-        typeof candidate.label !== "string" ||
-        candidate.label.trim() !== candidate.label ||
-        candidate.label.length === 0 ||
-        /[\x00-\x1f\x7f]/.test(candidate.label)
-      ) {
-        throw new Error(`Invalid runner label for ${role}`);
-      }
-      if (typeof candidate.free !== "boolean") {
-        throw new Error(
-          `Runner candidate for ${role} must have a boolean free field`,
-        );
-      }
-      if (labels.has(candidate.label)) {
-        throw new Error(`Runner role ${role} repeats label ${candidate.label}`);
-      }
-      labels.add(candidate.label);
-    }
-  }
-  return catalog;
-}
+const labels = new Set(Object.values(inventory).flat());
+const freeLabels = new Set(inventory["github-standard"]);
 
 function freeOnlyPolicy(input, owner) {
   if (input === "") {
@@ -68,19 +21,38 @@ function freeOnlyPolicy(input, owner) {
   throw new Error("free-only must be true or false");
 }
 
-function resolveRunners(catalog, { freeOnly, required = [] }) {
-  validateCatalog(catalog);
-  const runners = Object.fromEntries(
-    Object.entries(catalog).flatMap(([role, candidates]) => {
-      const candidate = candidates.find(
-        (candidate) => !freeOnly || candidate.free,
-      );
-      return candidate ? [[role, candidate.label]] : [];
-    }),
-  );
-
+function resolveRunners({ freeOnly, required = [], roles = {} }) {
+  if (!roles || typeof roles !== "object" || Array.isArray(roles)) {
+    throw new Error(
+      "roles must be a JSON object mapping role names to runner labels",
+    );
+  }
+  const candidatesByRole = { ...defaultRoles, ...roles };
+  const runners = {};
+  for (const [role, candidates] of Object.entries(candidatesByRole)) {
+    if (!/^[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*$/.test(role)) {
+      throw new Error(`Invalid runner role: ${JSON.stringify(role)}`);
+    }
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      throw new Error(`Runner role ${role} must have at least one candidate`);
+    }
+    for (const label of candidates) {
+      if (!labels.has(label)) {
+        throw new Error(
+          `Unknown runner label for ${role}: ${JSON.stringify(label)}`,
+        );
+      }
+    }
+    if (new Set(candidates).size !== candidates.length) {
+      throw new Error(`Runner role ${role} repeats a candidate`);
+    }
+    const selected = candidates.find(
+      (label) => !freeOnly || freeLabels.has(label),
+    );
+    if (selected !== undefined) runners[role] = selected;
+  }
   for (const role of required) {
-    if (!Object.hasOwn(catalog, role)) {
+    if (!Object.hasOwn(candidatesByRole, role)) {
       throw new Error(`Unknown required runner role: ${role}`);
     }
     if (!Object.hasOwn(runners, role)) {
@@ -96,10 +68,8 @@ function run({ env = process.env } = {}) {
     env.GITHUB_REPOSITORY_OWNER,
   );
   const required = (env.INPUT_REQUIRED || "").split(/\s+/).filter(Boolean);
-  const catalog = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "runners.json"), "utf8"),
-  );
-  const runners = resolveRunners(catalog, { freeOnly, required });
+  const roles = JSON.parse(env.INPUT_ROLES || "{}");
+  const runners = resolveRunners({ freeOnly, required, roles });
   if (!env.GITHUB_OUTPUT) {
     throw new Error("GITHUB_OUTPUT is required");
   }
@@ -110,7 +80,7 @@ function run({ env = process.env } = {}) {
   );
 }
 
-module.exports = { freeOnlyPolicy, resolveRunners, run, validateCatalog };
+module.exports = { freeOnlyPolicy, resolveRunners, run };
 
 if (require.main === module) {
   try {

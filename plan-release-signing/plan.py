@@ -42,9 +42,9 @@ def runner_labels(value: str = "") -> dict[str, str]:
     if value:
         runners = json.loads(value)
     else:
-        catalog_path = Path(__file__).parents[1] / "select-runners" / "runners.json"
-        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-        runners = {role: candidates[0]["label"] for role, candidates in catalog.items()}
+        roles_path = Path(__file__).parents[1] / "select-runners" / "roles.json"
+        roles = json.loads(roles_path.read_text(encoding="utf-8"))
+        runners = {role: candidates[0] for role, candidates in roles.items()}
     if not isinstance(runners, dict) or not all(
         isinstance(role, str)
         and isinstance(label, str)

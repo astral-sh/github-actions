@@ -1,19 +1,21 @@
 # Select runners
 
-Resolve logical runner roles from the shared [catalog](runners.json). The action
-uses its bundled catalog and needs neither a checkout nor a GitHub token.
+Choose runners for CI jobs from the [runner inventory](runners.json), which
+lists exact labels for Namespace, Depot, GitHub, and CodSpeed. The
+[default roles](roles.json) map job requirements to ordered lists of those
+labels. Both files ship with the action.
 
-Each role contains an ordered list of candidates. Selection uses the first
-candidate, or the first candidate marked `free` when `free-only` is enabled.
+For each role, the action selects the first candidate. With `free-only`
+enabled, it selects the first candidate in the `github-standard` group.
 By default, workflows outside the `astral-sh` organization use only free
-candidates. This uses the workflow repository owner: a contributor's pull request
-to an Astral repository still runs on Astral's runners, while a workflow in the
-contributor's fork uses GitHub-hosted alternatives. Astral repositories must have
+candidates. A pull request targeting an Astral repository runs on Astral's
+runners. A workflow running in the contributor's fork uses GitHub-hosted
+alternatives. Astral repositories must have
 access to the configured runner pools.
 
-Pin the action to a full commit SHA so the resolver and catalog change together.
-Runner selection is configuration, not a probe of runner capacity or provider
-availability; an unavailable provider does not trigger another selection.
+Pin the action to a full commit SHA so the resolver, inventory, and roles
+change together. Selection uses the configured labels and takes place before
+GitHub schedules the dependent jobs. A queued job stays on its selected label.
 
 ## Usage
 
@@ -45,11 +47,27 @@ Reusable workflows can accept a single required `runners` string input and use
 `${{ fromJSON(inputs.runners).ubuntu-x86_64-16 }}`. The caller remains responsible
 for job permissions, conditions, timeouts, and workload settings.
 
+To select other machines from the inventory, use `roles` to add a role or
+replace the candidates for a default role. This example uses a 32-core
+Namespace runner for Windows builds and a 32-core Depot runner for Linux
+builds. Each role names a standard GitHub runner for forks.
+
+```yaml
+with:
+  roles: |
+    {
+      "windows-build": ["namespace-profile-windows-2022-x86-64-32x64", "windows-2025"],
+      "linux-build": ["depot-ubuntu-24.04-32", "ubuntu-24.04"]
+    }
+  required: windows-build linux-build
+```
+
 ## Inputs and outputs
 
 | Input       | Meaning                                                                                    |
 | ----------- | ------------------------------------------------------------------------------------------ |
 | `free-only` | Optional `true` or `false` override. Defaults to `true` outside `astral-sh`.               |
+| `roles`     | Optional JSON object mapping role names to ordered lists of inventory labels.              |
 | `required`  | Whitespace-separated roles that must resolve. Unknown or unavailable roles fail selection. |
 
 | Output      | Meaning                                                            |
@@ -59,8 +77,8 @@ for job permissions, conditions, timeouts, and workload settings.
 
 Sizes in ordinary role names describe the preferred runner. Free fallbacks may
 have fewer CPUs and less memory, so callers may need longer timeouts or less
-parallelism. The `free` flag describes the public-repository runner tier, not a
-billing guarantee for private repositories.
+parallelism. GitHub provides the `github-standard` runners free of charge for
+public repositories. Private repositories follow their GitHub billing plan.
 
 Specialized roles are omitted when no eligible candidate exists:
 
@@ -69,6 +87,6 @@ Specialized roles are omitted when no eligible candidate exists:
 - `ubuntu-x86_64-codspeed` requires CodSpeed's walltime benchmark runner. Guard
   the benchmark job with an `if` checking that this role is present.
 
-The `-github` variants retain the GitHub runner image where a workload uses it;
-the corresponding ordinary Linux build roles use Depot's runner and cache.
+The `-github` variants use the GitHub runner image. The corresponding Linux
+build roles use Depot's runner and cache.
 The `-slim` role permits the constrained `ubuntu-slim` image as its free fallback.
