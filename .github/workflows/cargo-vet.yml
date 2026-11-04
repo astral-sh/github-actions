@@ -18,7 +18,7 @@ permissions: {}
 
 jobs:
   vet:
-    name: "cargo vet in (${{ matrix.workspace }})"
+    name: "cargo-vet in ${{ matrix.workspace }}"
     timeout-minutes: 10
     runs-on: ${{ inputs.runner }}
     strategy:
