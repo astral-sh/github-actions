@@ -1,0 +1,74 @@
+name: "Plan Astral Docker images"
+description: "Select build and publication settings for an Astral release, development build, or dry run."
+
+inputs:
+  name:
+    description: "Astral project name, such as `uv`, `ruff`, or `ty`."
+    required: true
+  plan:
+    description: "The `cargo-dist` release plan, or an empty string for a pull-request build."
+    default: ""
+  push-dev:
+    description: "Plan SHA-tagged development-image publication from a same-repository Astral pull request."
+    default: "false"
+  production-project:
+    description: "Depot project for release builds in the primary repository."
+    required: true
+  development-project:
+    description: "Depot project for development builds in the calling repository."
+    required: true
+  dockerhub:
+    description: "Include `docker.io/astral/<name>` as a release-image destination."
+    default: "false"
+  image-mappings:
+    description: "One variant per line: a base image followed by comma-separated aliases."
+    default: |
+      alpine:3.23,alpine3.23,alpine
+      debian:trixie-slim,trixie-slim,debian-slim
+      buildpack-deps:trixie,trixie,debian
+
+outputs:
+  depot-project-id:
+    description: "Depot project for this build."
+    value: ${{ steps.plan.outputs.depot-project-id }}
+  images:
+    description: "Newline-separated Astral registry destinations."
+    value: ${{ steps.plan.outputs.images }}
+  ghcr-image:
+    description: "GHCR repository for the base image and its variants."
+    value: ${{ steps.plan.outputs.ghcr-image }}
+  login:
+    description: "Whether the caller should authenticate Docker Hub and DHI pulls."
+    value: ${{ steps.plan.outputs.login }}
+  publish:
+    description: "Whether this build is intended for publication after the caller's release gates."
+    value: ${{ steps.plan.outputs.publish }}
+  mode:
+    description: "The tag mode: `release`, `development`, or `dry-run`."
+    value: ${{ steps.plan.outputs.mode }}
+  save:
+    description: "Whether to save images in Depot Registry for the publication handoff."
+    value: ${{ steps.plan.outputs.save }}
+  version:
+    description: "Release version to check against `pyproject.toml`; empty for other builds."
+    value: ${{ steps.plan.outputs.version }}
+  matrix:
+    description: "Variant matrix, excluding DHI images when authenticated pulls are disabled."
+    value: ${{ steps.plan.outputs.matrix }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Plan images"
+      id: plan
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        NAME: ${{ inputs.name }}
+        PLAN: ${{ inputs.plan }}
+        PUSH_DEV: ${{ inputs.push-dev }}
+        PRODUCTION_PROJECT: ${{ inputs.production-project }}
+        DEVELOPMENT_PROJECT: ${{ inputs.development-project }}
+        DOCKERHUB: ${{ inputs.dockerhub }}
+        IMAGE_MAPPINGS: ${{ inputs.image-mappings }}
+      run: python3 "$ACTION_PATH/plan.py"
