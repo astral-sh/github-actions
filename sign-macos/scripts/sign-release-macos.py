@@ -6,7 +6,7 @@
 # no-build = true
 # exclude-newer = "P7D"
 # ///
-"""Sign macOS executables from all target directories with Azure Key Vault.
+"""Sign macOS executables with the selected PKCS#11 backend.
 
 The input contains one directory per target, each holding its executables.
 The new output directory preserves this layout and includes the signing
@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from enum import Enum
 from pathlib import Path
@@ -101,8 +102,18 @@ def certificate_sha256(path: Path) -> str:
     return certificate.fingerprint(hashes.SHA256()).hex()
 
 
-def sign_binaries(unsigned: Path, signed: Path) -> None:
+def sign_binaries(
+    unsigned: Path | None, signed: Path | None, *, preflight: bool = False
+) -> None:
     """Download the pinned components and certificate once, then sign every target."""
+    backend = os.environ.get("SIGNING_BACKEND", "azure")
+    if backend not in ("azure", "signer-service"):
+        raise ValueError(f"Unsupported signing backend: {backend}")
+    if preflight and backend != "signer-service":
+        raise ValueError("Signing preflight requires the signer-service backend")
+    if not preflight and (unsigned is None or signed is None):
+        raise ValueError("Signing requires unsigned and signed directories")
+
     required = (
         "STORAGE_ACCOUNT",
         "STORAGE_CONTAINER",
@@ -115,6 +126,12 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         "KEY_NAME",
         "CERTIFICATE_SHA256",
     )
+    if backend == "signer-service":
+        required += (
+            "SIGNER_SERVICE_ENDPOINT",
+            "SIGNER_SERVICE_PURPOSE",
+            "SIGNER_SERVICE_KEY_ID",
+        )
     for name in required:
         if not os.environ.get(name):
             raise ValueError(f"Missing signing configuration: {name}")
@@ -154,6 +171,36 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
         if certificate_sha256(certificate) != os.environ["CERTIFICATE_SHA256"].lower():
             raise ValueError("Signing certificate SHA-256 mismatch")
 
+        signing_env = {**os.environ, "AKV_PKCS11_BACKEND": backend}
+        if backend == "signer-service":
+            signing_env.update(
+                SIGNER_SERVICE_KEY_LABEL=os.environ["KEY_NAME"],
+                SIGNER_SERVICE_CERTIFICATE_FILE=str(certificate),
+            )
+
+        if preflight:
+            print(
+                "Signing components and public certificate passed SHA-256 checks.",
+                flush=True,
+            )
+            subprocess.run([rcodesign, "--version"], check=True, timeout=30)
+            subprocess.run(
+                [
+                    sys.executable,
+                    Path(__file__).with_name("preflight-pkcs11.py"),
+                    pkcs11,
+                    certificate,
+                ],
+                check=True,
+                env=signing_env,
+                timeout=90,
+            )
+            print(
+                "Signing preflight passed; no binaries signed or output directory created."
+            )
+            return
+
+        assert unsigned is not None and signed is not None
         signed.mkdir()
         for target in sorted(unsigned.iterdir()):
             destination = signed / target.name
@@ -197,6 +244,7 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
                             output,
                         ],
                         check=True,
+                        env=signing_env,
                     )
                 except subprocess.CalledProcessError:
                     raise RuntimeError(
@@ -205,15 +253,25 @@ def sign_binaries(unsigned: Path, signed: Path) -> None:
 
 
 def main() -> None:
-    """Sign using the Azure identity and settings from the protected release job."""
+    """Sign using the selected backend and settings from the protected release job."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("unsigned", type=Path)
-    parser.add_argument("signed", type=Path)
+    parser.add_argument("unsigned", type=Path, nargs="?")
+    parser.add_argument("signed", type=Path, nargs="?")
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Download and verify components, then discover the signer key without signing.",
+    )
     args = parser.parse_args()
 
     try:
-        sign_binaries(args.unsigned, args.signed)
-    except (OSError, ValueError, RuntimeError) as error:
+        mode = os.environ.get("PREFLIGHT_ONLY", "false")
+        if mode not in ("true", "false"):
+            raise ValueError("PREFLIGHT_ONLY must be true or false")
+        sign_binaries(
+            args.unsigned, args.signed, preflight=args.preflight or mode == "true"
+        )
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         parser.exit(1, f"{error}\n")
 
 
