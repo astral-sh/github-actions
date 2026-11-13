@@ -16,7 +16,7 @@ on:
       helper-runner:
         description: "Linux x86-64 runner for preparing and publishing findings"
         type: string
-        default: ubuntu-latest
+        default: ubuntu-24.04
       uv-version:
         description: "uv version used for repository setup and review scripts"
         type: string
