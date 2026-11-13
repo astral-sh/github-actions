@@ -36,6 +36,9 @@ The action provides four JSON outputs:
 - `macos`: macOS artifact declarations with native runner and Python architecture.
 - `windows`: Windows artifact declarations with native runner and Python architecture.
 
-The native matrices use Astral's macOS runners, Astral's x86 Windows runner,
-and GitHub's ARM64 Windows runner. An unknown native target fails planning so a
-new release target cannot bypass signing or verification.
+Pass the `runners` JSON output from [Select runners](../select-runners/) to use
+the same selection as the rest of the workflow. The native matrices require
+`macos-aarch64-8`, `windows-x86_64-16`, and `windows-aarch64-8` for the corresponding
+targets. If `runners` is omitted, the action uses the preferred candidates from
+the shared catalog. Missing required runners and unknown native targets fail
+planning so a new release target cannot bypass signing or verification.
