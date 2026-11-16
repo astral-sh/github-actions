@@ -11,25 +11,28 @@ if (!version)
 const layout =
   Number(version[1]) > 1 || Number(version[2]) >= 100 ? "unit" : "legacy";
 
-const workspace = fs.mkdtempSync(
+const directory = fs.mkdtempSync(
   path.join(process.env.RUNNER_TEMP, "cargo workspace "),
 );
+const workspace = path.join(directory, "workspace");
+const dependency = path.join(directory, "dependency");
+fs.mkdirSync(workspace);
 fs.mkdirSync(path.join(workspace, "src"));
 fs.writeFileSync(
   path.join(workspace, "Cargo.toml"),
-  '[package]\nname = "workspace-cache-fixture"\nversion = "0.1.0"\nedition = "2024"\n\n[dependencies]\ncached-dependency = { path = "dependency" }\n\n[profile.profiling]\ninherits = "dev"\n',
+  '[package]\nname = "workspace-cache-fixture"\nversion = "0.1.0"\nedition = "2024"\n\n[dependencies]\ncached-dependency = { path = "../dependency" }\n\n[profile.profiling]\ninherits = "dev"\n',
 );
 fs.writeFileSync(
   path.join(workspace, "src", "lib.rs"),
   "pub fn example() { cached_dependency::example(); }\n",
 );
-fs.mkdirSync(path.join(workspace, "dependency", "src"), { recursive: true });
+fs.mkdirSync(path.join(dependency, "src"), { recursive: true });
 fs.writeFileSync(
-  path.join(workspace, "dependency", "Cargo.toml"),
+  path.join(dependency, "Cargo.toml"),
   '[package]\nname = "cached-dependency"\nversion = "0.1.0"\nedition = "2024"\n',
 );
 fs.writeFileSync(
-  path.join(workspace, "dependency", "src", "lib.rs"),
+  path.join(dependency, "src", "lib.rs"),
   "pub fn example() {}\n",
 );
 // Pruning must skip discovery of the caller's Python project and uv configuration.
