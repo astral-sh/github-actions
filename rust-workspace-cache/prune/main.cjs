@@ -19,6 +19,6 @@ if (enabled) {
   fs.writeFileSync(marker, "");
   fs.appendFileSync(
     process.env.GITHUB_STATE,
-    `cache=${JSON.stringify({ workspace, profiles, marker })}\n`,
+    `cache=${JSON.stringify({ workspace, target, profiles, marker })}\n`,
   );
 }

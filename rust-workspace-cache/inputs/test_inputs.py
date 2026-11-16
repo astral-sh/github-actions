@@ -35,6 +35,92 @@ class ToolDirectoryTest(unittest.TestCase):
             self.assertFalse((live / "stale").exists())
             self.assertFalse(staged.exists())
 
+    def test_same_name_build_scripts_are_conservatively_invalidated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary) / "debug"
+            package = profile / "build" / "example"
+            units = [package / name for name in ("0123456789abcdef", "fedcba9876543210")]
+            for unit in units:
+                (unit / "fingerprint").mkdir(parents=True)
+                (unit / "fingerprint" / "run-build-script-build").touch()
+                (unit / "out").mkdir()
+                (unit / "out" / "generated").touch()
+
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"example"}, build_scripts_only=True),
+                2,
+            )
+            self.assertTrue(all(not unit.exists() for unit in units))
+
+    def test_legacy_invalidation_preserves_a_modern_package_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary) / "debug"
+            name = "fixture-0123456789abcdef"
+            legacy = profile / ".fingerprint" / name
+            legacy.mkdir(parents=True)
+            (legacy / "run-build-script-build").touch()
+            modern = profile / "build" / name / "fedcba9876543210"
+            (modern / "fingerprint").mkdir(parents=True)
+            (modern / "out").mkdir()
+            (modern / "out" / "dependency.rlib").touch()
+
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
+                1,
+            )
+            self.assertFalse(legacy.exists())
+            self.assertTrue((modern / "out" / "dependency.rlib").exists())
+
+    def test_invalidation_does_not_follow_a_symlinked_profile_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            unit = outside / "debug" / "build" / "fixture" / "0123456789abcdef"
+            (unit / "fingerprint").mkdir(parents=True)
+            (unit / "fingerprint" / "run-build-script-build").touch()
+            target = root / "target"
+            try:
+                target.symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(str(error))
+
+            with self.assertRaisesRegex(ValueError, "symlinked path component"):
+                inputs.invalidate_units(
+                    [target / "debug"], {"fixture"}, build_scripts_only=True, target=target
+                )
+            self.assertTrue(unit.exists())
+
+    def test_legacy_invalidation_does_not_follow_symlinked_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "debug"
+            profile.mkdir()
+            outside = root / "outside"
+            unit = outside / "fixture-0123456789abcdef"
+            unit.mkdir(parents=True)
+            (unit / "run-build-script-build").touch()
+            try:
+                (profile / ".fingerprint").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(str(error))
+
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
+                0,
+            )
+            self.assertTrue(unit.exists())
+
+            (profile / ".fingerprint").unlink()
+            fingerprint = profile / ".fingerprint" / unit.name
+            fingerprint.mkdir(parents=True)
+            (fingerprint / "run-build-script-build").touch()
+            (profile / "build").symlink_to(outside, target_is_directory=True)
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
+                1,
+            )
+            self.assertTrue(unit.exists())
+
     def test_new_layout_invalidation_removes_only_matching_units(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

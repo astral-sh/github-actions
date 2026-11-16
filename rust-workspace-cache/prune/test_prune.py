@@ -1,12 +1,14 @@
+import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from prune import prune_workspace_fingerprints
+from prune import prune_workspace_fingerprints, validate_profile, workspace_packages
 
 OLD = 1_000_000_000
 MARKER = 2_000_000_000
@@ -43,6 +45,22 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
         (unit / "out" / "artifact").write_text("artifact")
         return unit
 
+    @unittest.skipIf(sys.platform == "win32", "Creating symlinks requires privileges")
+    def test_rejects_symlinked_target_and_nested_profile_components(self) -> None:
+        target = self.profile / "target"
+        target.mkdir()
+        outside = self.profile / "outside"
+        outside.mkdir()
+        (target / "triple").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlinked Cargo path"):
+            validate_profile(target, target / "triple" / "debug")
+        linked_target = self.profile / "linked-target"
+        linked_target.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlinked Cargo path"):
+            validate_profile(linked_target, linked_target / "debug")
+        with self.assertRaisesRegex(ValueError, "outside target directory"):
+            validate_profile(target, outside / "debug")
+
     def test_prunes_cargo_1_100_workspace_units(self) -> None:
         (self.profile / ".fingerprint").rmdir()
         old = self.unit("example", "1111111111111111", OLD)
@@ -75,6 +93,33 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
         )
         for retained in (old, dependency, other_old, active):
             self.assertTrue(retained.is_dir())
+
+    def test_retains_dependencies_with_the_same_name_as_a_workspace_package(self) -> None:
+        lockfile = self.profile / "Cargo.lock"
+        lockfile.write_text(
+            'version = 4\n'
+            '[[package]]\nname = "example"\nversion = "0.1.0"\n'
+            '[[package]]\nname = "example"\nversion = "0.2.0"\n'
+            '[[package]]\nname = "unique"\nversion = "0.1.0"\n'
+        )
+        metadata = {
+            "workspace_root": str(self.profile),
+            "workspace_members": ["example@0.2.0", "unique@0.1.0"],
+            "packages": [
+                {"name": "example", "id": "example@0.2.0"},
+                {"name": "unique", "id": "unique@0.1.0"},
+            ],
+        }
+        with patch("prune.subprocess.check_output", return_value=json.dumps(metadata)):
+            packages = workspace_packages(self.profile)
+        self.assertEqual(packages, {"unique"})
+
+        dependency = self.unit("example", "1111111111111111", OLD)
+        self.unit("example", "2222222222222222", CURRENT)
+        self.assertEqual(
+            prune_workspace_fingerprints(self.profile, MARKER, packages), (0, 0, 1)
+        )
+        self.assertTrue(dependency.is_dir())
 
     def test_retains_dependency_package_named_like_a_legacy_build_unit(self) -> None:
         self.unit("example", "1111111111111111", OLD)

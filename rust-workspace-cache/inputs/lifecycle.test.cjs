@@ -165,6 +165,13 @@ test("rejects extra directories outside the target or used by Cargo", (context) 
   }
 });
 
+test("rejects Cargo profiles outside the target directory", () => {
+  const target = path.resolve("target");
+  for (const profile of [".", "../outside", path.resolve("outside")]) {
+    assert.throws(() => profileDirectories(target, profile), /within the target/);
+  }
+});
+
 test("does not save metadata when restoration fails", (context) => {
   const result = lifecycle(context, true, 7);
   assert.equal(result.status, 7);

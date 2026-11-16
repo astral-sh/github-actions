@@ -7,6 +7,8 @@ import json
 import re
 import shutil
 import subprocess
+import tomllib
+from collections import Counter
 from pathlib import Path
 
 FINGERPRINT_DIRECTORY = re.compile(r"^(?P<package>.+)-(?P<fingerprint>[0-9a-f]{16})$")
@@ -23,9 +25,16 @@ def workspace_packages(workspace: Path) -> set[str]:
         )
     )
     members = set(metadata["workspace_members"])
-    return {
+    names = {
         package["name"] for package in metadata["packages"] if package["id"] in members
     }
+    # Cargo places different versions or sources of a package under the same
+    # package name. A unit hash alone cannot distinguish a workspace member from
+    # a dependency with that name, so retain both when the lockfile is ambiguous.
+    with (Path(metadata["workspace_root"]) / "Cargo.lock").open("rb") as lockfile:
+        locked = tomllib.load(lockfile)
+    counts = Counter(package["name"] for package in locked.get("package", ()))
+    return {name for name in names if counts[name] == 1}
 
 
 def fingerprint_last_used(directory: Path) -> int | None:
@@ -37,6 +46,24 @@ def fingerprint_last_used(directory: Path) -> int | None:
         and fingerprint.is_file()
     ]
     return max(timestamps, default=None)
+
+
+def validate_profile(target: Path, profile: Path) -> None:
+    try:
+        relative = profile.relative_to(target)
+    except ValueError:
+        raise ValueError(
+            f"Cargo profile {profile} is outside target directory {target}"
+        ) from None
+    if not relative.parts:
+        raise ValueError("Cargo profile must be below the target directory")
+    current = target
+    for part in relative.parts:
+        if current.is_symlink():
+            raise ValueError(f"Refusing to prune symlinked Cargo path: {current}")
+        current /= part
+    if current.is_symlink():
+        raise ValueError(f"Refusing to prune symlinked Cargo path: {current}")
 
 
 def prune_workspace_fingerprints(
@@ -150,11 +177,13 @@ def main() -> None:
         "profiles", type=Path, nargs="+", help="Cargo profile directories"
     )
     parser.add_argument("marker", type=Path, help="Marker created before the build")
+    parser.add_argument("--target-directory", type=Path, required=True)
     args = parser.parse_args()
 
     marker_timestamp = args.marker.stat().st_mtime_ns
     packages = workspace_packages(Path.cwd())
     for profile in args.profiles:
+        validate_profile(args.target_directory, profile)
         stale, removed, active = prune_workspace_fingerprints(
             profile, marker_timestamp, packages
         )

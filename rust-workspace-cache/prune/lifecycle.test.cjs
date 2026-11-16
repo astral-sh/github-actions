@@ -48,6 +48,7 @@ test("records an isolated marker and the external workspace for pruning", (conte
   assert.equal(result.environment, "CARGO_UNSTABLE_MTIME_ON_USE=true\n");
   const state = JSON.parse(result.state.slice("cache=".length));
   assert.equal(state.workspace, result.workspace);
+  assert.equal(state.target, path.join(result.workspace, "build-output"));
   assert.deepEqual(state.profiles, [
     path.join(result.workspace, "build-output", "fast-build-nightly"),
   ]);
@@ -137,6 +138,8 @@ test("prefers uv without discovering the caller's Python project or configuratio
         path.join(__dirname, "prune.py"),
         ...result.state.profiles,
         result.state.marker,
+        "--target-directory",
+        result.state.target,
       ],
       options: { cwd: result.state.workspace, stdio: "inherit" },
     },
@@ -162,6 +165,8 @@ for (const [platform, python] of [
       path.join(__dirname, "prune.py"),
       ...result.state.profiles,
       result.state.marker,
+      "--target-directory",
+      result.state.target,
     ]);
     assert.deepEqual(result.calls[1].options, {
       cwd: result.state.workspace,

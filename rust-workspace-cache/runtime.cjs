@@ -6,7 +6,20 @@ function profileDirectories(target, value) {
     .split(/\r?\n/)
     .map((profile) => profile.trim())
     .filter(Boolean)
-    .map((profile) => path.resolve(target, profile));
+    .map((profile) => {
+      const directory = path.resolve(target, profile);
+      const relative = path.relative(target, directory);
+      if (
+        !relative ||
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+      )
+        throw new Error(
+          "Cargo profiles must be directories within the target directory",
+        );
+      return directory;
+    });
   if (profiles.length === 0)
     throw new Error("At least one build profile is required");
   return profiles;
