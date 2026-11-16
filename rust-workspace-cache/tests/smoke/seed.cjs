@@ -24,5 +24,4 @@ function createStaleArtifact(target, name, hash) {
 for (const profile of ["debug", "profiling"]) {
   const target = path.join(workspace, "target", profile);
   createStaleArtifact(target, "workspace-cache-fixture", "1111111111111111");
-  createStaleArtifact(target, "cached-dependency", "2222222222222222");
 }

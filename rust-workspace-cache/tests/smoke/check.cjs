@@ -18,15 +18,16 @@ for (const profile of ["debug", "profiling"]) {
       ),
       "The active workspace unit must remain cached",
     );
+    const dependency = path.join(target, "build", "cached-dependency");
     assert.ok(
-      fs.existsSync(
-        path.join(
-          target,
-          "build",
-          "cached-dependency",
-          "2222222222222222",
-          "out",
-          "libcached_dependency-2222222222222222.rlib",
+      fs.readdirSync(dependency).some((entry) =>
+        fs.existsSync(
+          path.join(
+            dependency,
+            entry,
+            "out",
+            `libcached_dependency-${entry}.rlib`,
+          ),
         ),
       ),
       "Cached dependency artifacts must remain",
@@ -56,8 +57,8 @@ for (const profile of ["debug", "profiling"]) {
       "The active workspace fingerprint must remain cached",
     );
     assert.ok(
-      fs.existsSync(
-        path.join(target, "deps", "libcached_dependency-2222222222222222.rlib"),
+      fs.readdirSync(path.join(target, "deps")).some((entry) =>
+        /^libcached_dependency-[0-9a-f]{16}\.rlib$/.test(entry),
       ),
       "Cached dependency artifacts must remain",
     );
