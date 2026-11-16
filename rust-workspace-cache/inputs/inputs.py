@@ -243,11 +243,12 @@ def restore(
     }
     # Changed tracked inputs or directory listings must rerun their build scripts
     # even with preserved mtimes or a clock behind the cached build's timestamp.
+    target = target or root / "target"
     invalidated = invalidate_units(
         profiles,
         changed_packages,
         build_scripts_only=True,
-        target=target or root / "target",
+        target=target,
     )
     invalidated_workspace = 0
     if (
@@ -258,7 +259,7 @@ def restore(
             profiles,
             set(current["workspace"]),
             build_scripts_only=False,
-            target=target or root / "target",
+            target=target,
         )
     for group, names in matching.items():
         for name in names:

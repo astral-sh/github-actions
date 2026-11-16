@@ -71,7 +71,7 @@ def prune_workspace_fingerprints(
 ) -> tuple[int, int, int]:
     fingerprint_root = profile / ".fingerprint"
     build_root = profile / "build"
-    stale_fingerprints_by_package: dict[str, set[str]] = {}
+    stale_candidates: set[tuple[str, str]] = set()
     active_fingerprints: set[str] = set()
     active_packages: set[str] = set()
     protected_fingerprints: set[str] = set()
@@ -93,7 +93,7 @@ def prune_workspace_fingerprints(
             if package in packages:
                 active_packages.add(package)
         elif package in packages:
-            stale_fingerprints_by_package.setdefault(package, set()).add(fingerprint)
+            stale_candidates.add((package, fingerprint))
 
     # Cargo before 1.100 stores all fingerprints in one profile directory.
     if not fingerprint_root.is_symlink() and fingerprint_root.is_dir():
@@ -126,9 +126,9 @@ def prune_workspace_fingerprints(
 
     stale_units = {
         (package, fingerprint)
-        for package in active_packages
-        for fingerprint in stale_fingerprints_by_package.get(package, set())
-        if fingerprint not in active_fingerprints
+        for package, fingerprint in stale_candidates
+        if package in active_packages
+        and fingerprint not in active_fingerprints
         and fingerprint not in protected_fingerprints
     }
     stale_fingerprints = {fingerprint for _, fingerprint in stale_units}

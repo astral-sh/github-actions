@@ -147,12 +147,6 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
         self.assertTrue(ambiguous.is_dir())
         self.assertTrue(dependency.is_file())
 
-    def test_refuses_to_prune_cargo_1_100_without_active_units(self) -> None:
-        old = self.unit("example", "1111111111111111", OLD)
-        with self.assertRaisesRegex(RuntimeError, "No active Cargo fingerprints"):
-            prune_workspace_fingerprints(self.profile, MARKER, {"example"})
-        self.assertTrue(old.is_dir())
-
     @unittest.skipIf(sys.platform == "win32", "Creating symlinks requires privileges")
     def test_does_not_follow_cargo_1_100_symlink_nodes(self) -> None:
         self.unit("example", "2222222222222222", CURRENT)
@@ -214,9 +208,11 @@ class PruneWorkspaceCacheTest(unittest.TestCase):
 
     def test_refuses_to_prune_without_active_fingerprints(self) -> None:
         old = self.fingerprint("example", "1111111111111111", OLD)
+        modern = self.unit("example", "2222222222222222", OLD)
         with self.assertRaisesRegex(RuntimeError, "No active Cargo fingerprints"):
             prune_workspace_fingerprints(self.profile, MARKER, {"example"})
         self.assertTrue(old.is_dir())
+        self.assertTrue(modern.is_dir())
 
     def test_retains_fingerprints_without_usage_metadata(self) -> None:
         unknown = self.fingerprint("example", "1111111111111111", OLD)

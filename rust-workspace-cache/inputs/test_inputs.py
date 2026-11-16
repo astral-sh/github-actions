@@ -35,23 +35,6 @@ class ToolDirectoryTest(unittest.TestCase):
             self.assertFalse((live / "stale").exists())
             self.assertFalse(staged.exists())
 
-    def test_same_name_build_scripts_are_conservatively_invalidated(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            profile = Path(temporary) / "debug"
-            package = profile / "build" / "example"
-            units = [package / name for name in ("0123456789abcdef", "fedcba9876543210")]
-            for unit in units:
-                (unit / "fingerprint").mkdir(parents=True)
-                (unit / "fingerprint" / "run-build-script-build").touch()
-                (unit / "out").mkdir()
-                (unit / "out" / "generated").touch()
-
-            self.assertEqual(
-                inputs.invalidate_units([profile], {"example"}, build_scripts_only=True),
-                2,
-            )
-            self.assertTrue(all(not unit.exists() for unit in units))
-
     def test_legacy_invalidation_preserves_a_modern_package_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             profile = Path(temporary) / "debug"
@@ -127,10 +110,12 @@ class ToolDirectoryTest(unittest.TestCase):
             profile = root / "debug"
             package = profile / "build" / "fixture"
             script = package / "0123456789abcdef"
+            same_name_script = package / "1111111111111111"
             binary = package / "fedcba9876543210"
             other = profile / "build" / "other" / "0123456789abcdef"
             for unit, marker in (
                 (script, "run-build-script-build"),
+                (same_name_script, "run-build-script-build"),
                 (binary, "bin-fixture"),
                 (other, "run-build-script-build"),
             ):
@@ -140,6 +125,27 @@ class ToolDirectoryTest(unittest.TestCase):
                 (unit / "out" / "generated").touch()
             (script / "run").mkdir()
             (script / "run" / "stdout").touch()
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
+                2,
+            )
+            self.assertFalse(script.exists())
+            self.assertFalse(same_name_script.exists())
+            self.assertTrue(binary.exists())
+            self.assertTrue(other.exists())
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=False),
+                1,
+            )
+            self.assertFalse(binary.exists())
+            self.assertTrue(other.exists())
+
+    def test_new_layout_invalidation_does_not_follow_symlinked_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "debug"
+            package = profile / "build" / "fixture"
+            package.mkdir(parents=True)
             outside = root / "outside"
             (outside / "fingerprint").mkdir(parents=True)
             (outside / "fingerprint" / "run-build-script-build").touch()
@@ -149,21 +155,10 @@ class ToolDirectoryTest(unittest.TestCase):
                 )
             except OSError as error:
                 self.skipTest(str(error))
-
             self.assertEqual(
                 inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
-                1,
+                0,
             )
-            self.assertFalse(script.exists())
-            self.assertTrue(binary.exists())
-            self.assertTrue(other.exists())
-            self.assertTrue(outside.exists())
-            self.assertEqual(
-                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=False),
-                1,
-            )
-            self.assertFalse(binary.exists())
-            self.assertTrue(other.exists())
             self.assertTrue(outside.exists())
 
     def test_source_layout_ignores_build_outputs_and_detects_retargeted_links(self) -> None:
