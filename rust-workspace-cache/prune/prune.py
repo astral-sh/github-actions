@@ -47,6 +47,8 @@ def workspace_packages(workspace: Path) -> set[str]:
         locked = tomllib.load(lockfile)
     # Case variants can share a build directory on case-insensitive filesystems.
     counts = Counter(package["name"].casefold() for package in locked.get("package", ()))
+    if root := locked.get("root"):
+        counts[root["name"].casefold()] += 1
     return {name for name in names if counts[name.casefold()] == 1}
 
 
