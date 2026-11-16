@@ -18,6 +18,17 @@ FINGERPRINT = re.compile(r"^(?P<package>.+)-[0-9a-f]{16}$")
 UNIT_HASH = re.compile(r"^[0-9a-f]{16}$")
 
 
+def is_redirect(path: Path) -> bool:
+    """Recognize symlinks and Windows reparse points without following them."""
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 def workspace_packages(root: Path) -> list[dict]:
     metadata = json.loads(
         subprocess.check_output(
@@ -164,13 +175,13 @@ def invalidate_units(
         component = boundary
         for part in ("", *relative.parts):
             component = component / part
-            if component.is_symlink():
-                raise ValueError(f"Cargo profile has a symlinked path component: {profile}")
+            if is_redirect(component):
+                raise ValueError(f"Cargo profile has a symlinked path component or reparse point: {profile}")
         fingerprints = profile / ".fingerprint"
         build = profile / "build"
         directories = (
             fingerprints.iterdir()
-            if fingerprints.is_dir() and not fingerprints.is_symlink()
+            if fingerprints.is_dir() and not is_redirect(fingerprints)
             else ()
         )
         for directory in directories:
@@ -179,14 +190,14 @@ def invalidate_units(
                 match
                 and match.group("package") in packages
                 and directory.is_dir()
-                and not directory.is_symlink()
+                and not is_redirect(directory)
                 and (not build_scripts_only or any(directory.glob("run-build-script-*")))
             ):
                 output = build / directory.name
-                if build.is_dir() and not build.is_symlink():
+                if build.is_dir() and not is_redirect(build):
                     if output.is_symlink():
                         output.unlink()
-                    elif output.is_dir() and not any(
+                    elif not is_redirect(output) and output.is_dir() and not any(
                         UNIT_HASH.fullmatch(entry.name) for entry in output.iterdir()
                     ):
                         shutil.rmtree(output)
@@ -194,20 +205,20 @@ def invalidate_units(
                 removed += 1
 
         # Cargo 1.100 stores each unit's fingerprint and output together.
-        if not build.is_dir() or build.is_symlink():
+        if not build.is_dir() or is_redirect(build):
             continue
         for package in packages:
             directory = build / package
-            if not directory.is_dir() or directory.is_symlink():
+            if not directory.is_dir() or is_redirect(directory):
                 continue
             for unit in directory.iterdir():
                 fingerprint = unit / "fingerprint"
                 if (
                     UNIT_HASH.fullmatch(unit.name)
                     and unit.is_dir()
-                    and not unit.is_symlink()
+                    and not is_redirect(unit)
                     and fingerprint.is_dir()
-                    and not fingerprint.is_symlink()
+                    and not is_redirect(fingerprint)
                     and (
                         not build_scripts_only
                         or any(fingerprint.glob("run-build-script-*"))
@@ -264,7 +275,7 @@ def restore(
     for group, names in matching.items():
         for name in names:
             path = safe_path(root, name)
-            if path is None or path.is_symlink():
+            if path is None or is_redirect(path):
                 continue
             os.utime(
                 path,

@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import shutil
+import stat
 import subprocess
 import tomllib
 from collections import Counter
@@ -14,6 +15,17 @@ from pathlib import Path
 FINGERPRINT_DIRECTORY = re.compile(r"^(?P<package>.+)-(?P<fingerprint>[0-9a-f]{16})$")
 ARTIFACT_FINGERPRINT = re.compile(r"-([0-9a-f]{16})(?:\.|$)")
 UNIT_FINGERPRINT = re.compile(r"^[0-9a-f]{16}$")
+
+
+def is_redirect(path: Path) -> bool:
+    """Recognize symlinks and Windows reparse points without following them."""
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
 
 
 def workspace_packages(workspace: Path) -> set[str]:
@@ -41,8 +53,8 @@ def fingerprint_last_used(directory: Path) -> int | None:
     timestamps = [
         fingerprint.stat().st_mtime_ns
         for metadata in directory.glob("*.json")
-        if not metadata.is_symlink()
-        and not (fingerprint := directory / metadata.stem).is_symlink()
+        if not is_redirect(metadata)
+        and not is_redirect(fingerprint := directory / metadata.stem)
         and fingerprint.is_file()
     ]
     return max(timestamps, default=None)
@@ -59,11 +71,11 @@ def validate_profile(target: Path, profile: Path) -> None:
         raise ValueError("Cargo profile must be below the target directory")
     current = target
     for part in relative.parts:
-        if current.is_symlink():
-            raise ValueError(f"Refusing to prune symlinked Cargo path: {current}")
+        if is_redirect(current):
+            raise ValueError(f"Refusing to prune symlinked Cargo path or reparse point: {current}")
         current /= part
-    if current.is_symlink():
-        raise ValueError(f"Refusing to prune symlinked Cargo path: {current}")
+    if is_redirect(current):
+        raise ValueError(f"Refusing to prune symlinked Cargo path or reparse point: {current}")
 
 
 def prune_workspace_fingerprints(
@@ -80,7 +92,7 @@ def prune_workspace_fingerprints(
     package_directories: set[Path] = set()
 
     def record(package: str, fingerprint: str, directory: Path) -> None:
-        if directory.is_symlink() or not directory.is_dir():
+        if is_redirect(directory) or not directory.is_dir():
             protected_fingerprints.add(fingerprint)
             return
         last_used = fingerprint_last_used(directory)
@@ -96,7 +108,7 @@ def prune_workspace_fingerprints(
             stale_candidates.add((package, fingerprint))
 
     # Cargo before 1.100 stores all fingerprints in one profile directory.
-    if not fingerprint_root.is_symlink() and fingerprint_root.is_dir():
+    if not is_redirect(fingerprint_root) and fingerprint_root.is_dir():
         for directory in fingerprint_root.iterdir():
             match = FINGERPRINT_DIRECTORY.fullmatch(directory.name)
             if match is not None:
@@ -107,15 +119,15 @@ def prune_workspace_fingerprints(
 
     # Cargo 1.100 stores each compilation unit, including its outputs, under
     # build/<package>/<hash>. Do not follow symlinks supplied by a cache.
-    if not build_root.is_symlink() and build_root.is_dir():
+    if not is_redirect(build_root) and build_root.is_dir():
         for package_directory in build_root.iterdir():
-            if package_directory.is_symlink() or not package_directory.is_dir():
+            if is_redirect(package_directory) or not package_directory.is_dir():
                 continue
             for unit in package_directory.iterdir():
                 if UNIT_FINGERPRINT.fullmatch(unit.name) is None:
                     continue
                 package_directories.add(package_directory)
-                if unit.is_symlink() or not unit.is_dir():
+                if is_redirect(unit) or not unit.is_dir():
                     protected_fingerprints.add(unit.name)
                     continue
                 record(package_directory.name, unit.name, unit / "fingerprint")
@@ -142,7 +154,7 @@ def prune_workspace_fingerprints(
             removed_paths += 1
 
     for directory in (fingerprint_root, profile / "deps", build_root):
-        if directory.is_symlink() or not directory.is_dir():
+        if is_redirect(directory) or not directory.is_dir():
             continue
 
         for artifact in directory.iterdir():
@@ -159,7 +171,11 @@ def prune_workspace_fingerprints(
                     # This is a Cargo 1.100 package directory, not a legacy build unit.
                     continue
 
-            if artifact.is_symlink() or artifact.is_file():
+            if artifact.is_symlink():
+                artifact.unlink()
+            elif is_redirect(artifact):
+                continue
+            elif artifact.is_file():
                 artifact.unlink()
             elif artifact.is_dir():
                 shutil.rmtree(artifact)
