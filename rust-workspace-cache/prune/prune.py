@@ -45,8 +45,9 @@ def workspace_packages(workspace: Path) -> set[str]:
     # a dependency with that name, so retain both when the lockfile is ambiguous.
     with (Path(metadata["workspace_root"]) / "Cargo.lock").open("rb") as lockfile:
         locked = tomllib.load(lockfile)
-    counts = Counter(package["name"] for package in locked.get("package", ()))
-    return {name for name in names if counts[name] == 1}
+    # Case variants can share a build directory on case-insensitive filesystems.
+    counts = Counter(package["name"].casefold() for package in locked.get("package", ()))
+    return {name for name in names if counts[name.casefold()] == 1}
 
 
 def fingerprint_last_used(directory: Path) -> int | None:
