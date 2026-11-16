@@ -15,6 +15,18 @@ import time
 from pathlib import Path
 
 FINGERPRINT = re.compile(r"^(?P<package>.+)-[0-9a-f]{16}$")
+UNIT_HASH = re.compile(r"^[0-9a-f]{16}$")
+
+
+def is_redirect(path: Path) -> bool:
+    """Recognize symlinks and Windows reparse points without following them."""
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
 
 
 def workspace_packages(root: Path) -> list[dict]:
@@ -144,29 +156,76 @@ def restorable_directories(snapshot: dict) -> set[str]:
 
 
 def invalidate_units(
-    profiles: list[Path], packages: set[str], *, build_scripts_only: bool
+    profiles: list[Path],
+    packages: set[str],
+    *,
+    build_scripts_only: bool,
+    target: Path | None = None,
 ) -> int:
+    # Cargo groups units by package name, including multiple versions and sources.
+    # Invalidate every matching unit so changed workspace inputs cannot reuse a stale
+    # build script, even if a same-name dependency must also be rebuilt.
     removed = 0
     for profile in profiles:
+        boundary = target or profile
+        try:
+            relative = profile.relative_to(boundary)
+        except ValueError as error:
+            raise ValueError(f"Cargo profile is outside the target directory: {profile}") from error
+        component = boundary
+        for part in ("", *relative.parts):
+            component = component / part
+            if is_redirect(component):
+                raise ValueError(f"Cargo profile has a symlinked path component or reparse point: {profile}")
         fingerprints = profile / ".fingerprint"
-        if not fingerprints.is_dir():
-            continue
-        for directory in fingerprints.iterdir():
+        build = profile / "build"
+        directories = (
+            fingerprints.iterdir()
+            if fingerprints.is_dir() and not is_redirect(fingerprints)
+            else ()
+        )
+        for directory in directories:
             match = FINGERPRINT.fullmatch(directory.name)
             if (
                 match
                 and match.group("package") in packages
                 and directory.is_dir()
-                and not directory.is_symlink()
+                and not is_redirect(directory)
                 and (not build_scripts_only or any(directory.glob("run-build-script-*")))
             ):
-                output = profile / "build" / directory.name
-                if output.is_symlink():
-                    output.unlink()
-                elif output.is_dir():
-                    shutil.rmtree(output)
+                output = build / directory.name
+                if build.is_dir() and not is_redirect(build):
+                    if output.is_symlink():
+                        output.unlink()
+                    elif not is_redirect(output) and output.is_dir() and not any(
+                        UNIT_HASH.fullmatch(entry.name) for entry in output.iterdir()
+                    ):
+                        shutil.rmtree(output)
                 shutil.rmtree(directory)
                 removed += 1
+
+        # Cargo 1.100 stores each unit's fingerprint and output together.
+        if not build.is_dir() or is_redirect(build):
+            continue
+        for package in packages:
+            directory = build / package
+            if not directory.is_dir() or is_redirect(directory):
+                continue
+            for unit in directory.iterdir():
+                fingerprint = unit / "fingerprint"
+                if (
+                    UNIT_HASH.fullmatch(unit.name)
+                    and unit.is_dir()
+                    and not is_redirect(unit)
+                    and fingerprint.is_dir()
+                    and not is_redirect(fingerprint)
+                    and (
+                        not build_scripts_only
+                        or any(fingerprint.glob("run-build-script-*"))
+                    )
+                ):
+                    shutil.rmtree(unit)
+                    removed += 1
     return removed
 
 
@@ -195,19 +254,28 @@ def restore(
     }
     # Changed tracked inputs or directory listings must rerun their build scripts
     # even with preserved mtimes or a clock behind the cached build's timestamp.
-    invalidated = invalidate_units(profiles, changed_packages, build_scripts_only=True)
+    target = target or root / "target"
+    invalidated = invalidate_units(
+        profiles,
+        changed_packages,
+        build_scripts_only=True,
+        target=target,
+    )
     invalidated_workspace = 0
     if (
         current["source_layout"] is None
         or current["source_layout"] != saved.get("source_layout")
     ):
         invalidated_workspace = invalidate_units(
-            profiles, set(current["workspace"]), build_scripts_only=False
+            profiles,
+            set(current["workspace"]),
+            build_scripts_only=False,
+            target=target,
         )
     for group, names in matching.items():
         for name in names:
             path = safe_path(root, name)
-            if path is None or path.is_symlink():
+            if path is None or is_redirect(path):
                 continue
             os.utime(
                 path,
@@ -270,6 +338,11 @@ def main() -> None:
     parser.add_argument("--extra-target-directory", type=Path)
     args = parser.parse_args()
     start = time.monotonic()
+    if args.target_directory is not None:
+        target = args.target_directory.absolute()
+        for profile in args.profiles:
+            if not profile.absolute().is_relative_to(target):
+                parser.error(f"Cargo profile is outside the target directory: {profile}")
     if args.operation == "save":
         data = scan(Path.cwd(), args.target_directory)
         args.manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -286,10 +359,16 @@ def main() -> None:
         )
     else:
         result = {"no_manifest": True}
-        if any((profile / ".fingerprint").is_dir() for profile in args.profiles):
+        if any(
+            (profile / ".fingerprint").is_dir() or (profile / "build").is_dir()
+            for profile in args.profiles
+        ):
             packages = {package["name"] for package in workspace_packages(Path.cwd())}
             result["invalidated_workspace_units"] = invalidate_units(
-                args.profiles, packages, build_scripts_only=False
+                args.profiles,
+                packages,
+                build_scripts_only=False,
+                target=args.target_directory or Path.cwd() / "target",
             )
     if extra := args.extra_target_directory:
         staged = args.manifest.with_name(f"target-{extra.name}")

@@ -3,6 +3,8 @@ description: Create a Cargo workspace and check its artifacts after the cache po
 outputs:
   workspace:
     description: Absolute path of the temporary Cargo workspace.
+  layout:
+    description: Cargo artifact layout used by the selected toolchain.
 runs:
   using: node24
   main: setup.cjs

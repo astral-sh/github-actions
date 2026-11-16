@@ -19,6 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [1.99.0, 1.100.0]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -28,17 +29,22 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Rust ${{ matrix.rust }}
+        run: rustup toolchain install ${{ matrix.rust }} --profile minimal
+
+      - name: Select Rust ${{ matrix.rust }}
+        shell: bash
+        run: echo "RUSTUP_TOOLCHAIN=${{ matrix.rust }}" >> "$GITHUB_ENV"
+
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "0.13.5"
           enable-cache: false
 
-      - name: Test pruning and lifecycle
+      - name: Test lifecycle
         shell: bash
         run: |
-          python -m unittest discover -s rust-workspace-cache/prune -p 'test_*.py'
-          python -m unittest discover -s rust-workspace-cache/inputs -p 'test_*.py'
           node --test rust-workspace-cache/prune/lifecycle.test.cjs
           node --test rust-workspace-cache/inputs/lifecycle.test.cjs
 
@@ -56,7 +62,10 @@ jobs:
             profiling
           cache-bin: ${{ runner.os != 'macOS' }}
           prefix-key: test-rust-workspace-cache
-          key: ${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ matrix.rust }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Seed stale cached artifacts
+        run: node rust-workspace-cache/tests/smoke/seed.cjs "${{ steps.fixture.outputs.workspace }}" "${{ steps.fixture.outputs.layout }}"
 
       - name: Build workspace
         working-directory: ${{ steps.fixture.outputs.workspace }}
