@@ -66,6 +66,9 @@ jobs:
           prefix-key: test-rust-workspace-cache
           key: ${{ matrix.rust }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      - name: Seed stale cached artifacts
+        run: node rust-workspace-cache/tests/smoke/seed.cjs "${{ steps.fixture.outputs.workspace }}" "${{ steps.fixture.outputs.layout }}"
+
       - name: Build workspace
         working-directory: ${{ steps.fixture.outputs.workspace }}
         run: |

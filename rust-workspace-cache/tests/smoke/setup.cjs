@@ -45,30 +45,10 @@ const result = spawnSync("cargo", ["generate-lockfile", "--offline"], {
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-function createStaleArtifact(target, name, hash) {
-  const unit = path.join(target, "build", name, hash);
-  const directory =
-    layout === "unit"
-      ? path.join(unit, "fingerprint")
-      : path.join(target, ".fingerprint", `${name}-${hash}`);
-  const crate = name.replaceAll("-", "_");
-  fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(path.join(directory, `lib-${crate}.json`), "{}");
-  const fingerprint = path.join(directory, `lib-${crate}`);
-  fs.writeFileSync(fingerprint, "stale");
-  fs.utimesSync(fingerprint, 1, 1);
-  const artifacts =
-    layout === "unit" ? path.join(unit, "out") : path.join(target, "deps");
-  fs.mkdirSync(artifacts, { recursive: true });
-  fs.writeFileSync(path.join(artifacts, `lib${crate}-${hash}.rlib`), "stale");
-}
-
-for (const profile of ["debug", "profiling"]) {
-  const target = path.join(workspace, "target", profile);
-  createStaleArtifact(target, "workspace-cache-fixture", "1111111111111111");
-  createStaleArtifact(target, "cached-dependency", "2222222222222222");
-}
-fs.appendFileSync(process.env.GITHUB_OUTPUT, `workspace=${workspace}\n`);
+fs.appendFileSync(
+  process.env.GITHUB_OUTPUT,
+  `workspace=${workspace}\nlayout=${layout}\n`,
+);
 fs.appendFileSync(
   process.env.GITHUB_STATE,
   `workspace=${workspace}\nlayout=${layout}\n`,
