@@ -11,6 +11,7 @@ from pathlib import Path
 
 FINGERPRINT_DIRECTORY = re.compile(r"^(?P<package>.+)-(?P<fingerprint>[0-9a-f]{16})$")
 ARTIFACT_FINGERPRINT = re.compile(r"-([0-9a-f]{16})(?:\.|$)")
+UNIT_FINGERPRINT = re.compile(r"^[0-9a-f]{16}$")
 
 
 def workspace_packages(workspace: Path) -> set[str]:
@@ -31,7 +32,9 @@ def fingerprint_last_used(directory: Path) -> int | None:
     timestamps = [
         fingerprint.stat().st_mtime_ns
         for metadata in directory.glob("*.json")
-        if (fingerprint := directory / metadata.stem).is_file()
+        if not metadata.is_symlink()
+        and not (fingerprint := directory / metadata.stem).is_symlink()
+        and fingerprint.is_file()
     ]
     return max(timestamps, default=None)
 
@@ -40,24 +43,24 @@ def prune_workspace_fingerprints(
     profile: Path, marker_timestamp: int, packages: set[str]
 ) -> tuple[int, int, int]:
     fingerprint_root = profile / ".fingerprint"
+    build_root = profile / "build"
     stale_fingerprints_by_package: dict[str, set[str]] = {}
     active_fingerprints: set[str] = set()
     active_packages: set[str] = set()
+    protected_fingerprints: set[str] = set()
+    units: list[tuple[str, str, Path]] = []
+    legacy_units: set[tuple[str, str]] = set()
+    package_directories: set[Path] = set()
 
-    for directory in fingerprint_root.iterdir():
-        if not directory.is_dir():
-            continue
-
-        match = FINGERPRINT_DIRECTORY.fullmatch(directory.name)
-        if match is None:
-            continue
-
+    def record(package: str, fingerprint: str, directory: Path) -> None:
+        if directory.is_symlink() or not directory.is_dir():
+            protected_fingerprints.add(fingerprint)
+            return
         last_used = fingerprint_last_used(directory)
+        if last_used is None or package not in packages:
+            protected_fingerprints.add(fingerprint)
         if last_used is None:
-            continue
-
-        package = match.group("package")
-        fingerprint = match.group("fingerprint")
+            return
         if last_used >= marker_timestamp:
             active_fingerprints.add(fingerprint)
             if package in packages:
@@ -65,25 +68,69 @@ def prune_workspace_fingerprints(
         elif package in packages:
             stale_fingerprints_by_package.setdefault(package, set()).add(fingerprint)
 
+    # Cargo before 1.100 stores all fingerprints in one profile directory.
+    if not fingerprint_root.is_symlink() and fingerprint_root.is_dir():
+        for directory in fingerprint_root.iterdir():
+            match = FINGERPRINT_DIRECTORY.fullmatch(directory.name)
+            if match is not None:
+                package = match.group("package")
+                fingerprint = match.group("fingerprint")
+                record(package, fingerprint, directory)
+                legacy_units.add((package, fingerprint))
+
+    # Cargo 1.100 stores each compilation unit, including its outputs, under
+    # build/<package>/<hash>. Do not follow symlinks supplied by a cache.
+    if not build_root.is_symlink() and build_root.is_dir():
+        for package_directory in build_root.iterdir():
+            if package_directory.is_symlink() or not package_directory.is_dir():
+                continue
+            for unit in package_directory.iterdir():
+                if UNIT_FINGERPRINT.fullmatch(unit.name) is None:
+                    continue
+                package_directories.add(package_directory)
+                if unit.is_symlink() or not unit.is_dir():
+                    protected_fingerprints.add(unit.name)
+                    continue
+                record(package_directory.name, unit.name, unit / "fingerprint")
+                units.append((package_directory.name, unit.name, unit))
+
     if not active_fingerprints:
         raise RuntimeError("No active Cargo fingerprints found; refusing to prune")
 
-    stale_fingerprints = {
-        fingerprint
+    stale_units = {
+        (package, fingerprint)
         for package in active_packages
         for fingerprint in stale_fingerprints_by_package.get(package, set())
+        if fingerprint not in active_fingerprints
+        and fingerprint not in protected_fingerprints
     }
-    stale_fingerprints.difference_update(active_fingerprints)
+    stale_fingerprints = {fingerprint for _, fingerprint in stale_units}
+    legacy_stale_units = stale_units & legacy_units
+    legacy_stale_fingerprints = {fingerprint for _, fingerprint in legacy_stale_units}
     removed_paths = 0
 
-    for directory in (fingerprint_root, profile / "deps", profile / "build"):
-        if not directory.is_dir():
+    for package, fingerprint, unit in units:
+        if (package, fingerprint) in stale_units:
+            shutil.rmtree(unit)
+            removed_paths += 1
+
+    for directory in (fingerprint_root, profile / "deps", build_root):
+        if directory.is_symlink() or not directory.is_dir():
             continue
 
         for artifact in directory.iterdir():
             match = ARTIFACT_FINGERPRINT.search(artifact.name)
-            if match is None or match.group(1) not in stale_fingerprints:
+            if match is None or match.group(1) not in legacy_stale_fingerprints:
                 continue
+            if directory in (fingerprint_root, build_root):
+                fingerprint = FINGERPRINT_DIRECTORY.fullmatch(artifact.name)
+                if fingerprint is None or (
+                    fingerprint.group("package"), fingerprint.group("fingerprint")
+                ) not in legacy_stale_units:
+                    continue
+                if directory == build_root and artifact in package_directories:
+                    # This is a Cargo 1.100 package directory, not a legacy build unit.
+                    continue
 
             if artifact.is_symlink() or artifact.is_file():
                 artifact.unlink()

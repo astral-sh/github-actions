@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 FINGERPRINT = re.compile(r"^(?P<package>.+)-[0-9a-f]{16}$")
+UNIT_HASH = re.compile(r"^[0-9a-f]{16}$")
 
 
 def workspace_packages(root: Path) -> list[dict]:
@@ -149,9 +150,8 @@ def invalidate_units(
     removed = 0
     for profile in profiles:
         fingerprints = profile / ".fingerprint"
-        if not fingerprints.is_dir():
-            continue
-        for directory in fingerprints.iterdir():
+        directories = fingerprints.iterdir() if fingerprints.is_dir() else ()
+        for directory in directories:
             match = FINGERPRINT.fullmatch(directory.name)
             if (
                 match
@@ -167,6 +167,30 @@ def invalidate_units(
                     shutil.rmtree(output)
                 shutil.rmtree(directory)
                 removed += 1
+
+        # Cargo 1.100 stores each unit's fingerprint and output together.
+        build = profile / "build"
+        if not build.is_dir() or build.is_symlink():
+            continue
+        for package in packages:
+            directory = build / package
+            if not directory.is_dir() or directory.is_symlink():
+                continue
+            for unit in directory.iterdir():
+                fingerprint = unit / "fingerprint"
+                if (
+                    UNIT_HASH.fullmatch(unit.name)
+                    and unit.is_dir()
+                    and not unit.is_symlink()
+                    and fingerprint.is_dir()
+                    and not fingerprint.is_symlink()
+                    and (
+                        not build_scripts_only
+                        or any(fingerprint.glob("run-build-script-*"))
+                    )
+                ):
+                    shutil.rmtree(unit)
+                    removed += 1
     return removed
 
 
@@ -286,7 +310,10 @@ def main() -> None:
         )
     else:
         result = {"no_manifest": True}
-        if any((profile / ".fingerprint").is_dir() for profile in args.profiles):
+        if any(
+            (profile / ".fingerprint").is_dir() or (profile / "build").is_dir()
+            for profile in args.profiles
+        ):
             packages = {package["name"] for package in workspace_packages(Path.cwd())}
             result["invalidated_workspace_units"] = invalidate_units(
                 args.profiles, packages, build_scripts_only=False

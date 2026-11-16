@@ -3,23 +3,64 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 for (const profile of ["debug", "profiling"]) {
-  const fingerprints = path.join(
-    process.env.STATE_workspace,
-    "target",
-    profile,
-    ".fingerprint",
-  );
-  assert.ok(
-    !fs.existsSync(
-      path.join(fingerprints, "workspace-cache-fixture-1111111111111111"),
-    ),
-    "The stale workspace fingerprint must be pruned",
-  );
-  assert.ok(
-    fs
-      .readdirSync(fingerprints)
-      .some((entry) => entry.startsWith("workspace-cache-fixture-")),
-    "The active workspace fingerprint must remain cached",
-  );
+  const target = path.join(process.env.STATE_workspace, "target", profile);
+  if (process.env.STATE_layout === "unit") {
+    const units = path.join(target, "build", "workspace-cache-fixture");
+    assert.ok(
+      !fs.existsSync(path.join(units, "1111111111111111")),
+      "The stale workspace unit must be pruned",
+    );
+    assert.ok(
+      fs.readdirSync(units).some((entry) =>
+        fs.existsSync(
+          path.join(units, entry, "fingerprint", "lib-workspace_cache_fixture"),
+        ),
+      ),
+      "The active workspace unit must remain cached",
+    );
+    assert.ok(
+      fs.existsSync(
+        path.join(
+          target,
+          "build",
+          "cached-dependency",
+          "2222222222222222",
+          "out",
+          "libcached_dependency-2222222222222222.rlib",
+        ),
+      ),
+      "Cached dependency artifacts must remain",
+    );
+  } else {
+    const fingerprints = path.join(target, ".fingerprint");
+    assert.ok(
+      !fs.existsSync(
+        path.join(fingerprints, "workspace-cache-fixture-1111111111111111"),
+      ),
+      "The stale workspace fingerprint must be pruned",
+    );
+    assert.ok(
+      !fs.existsSync(
+        path.join(
+          target,
+          "deps",
+          "libworkspace_cache_fixture-1111111111111111.rlib",
+        ),
+      ),
+      "The stale workspace artifact must be pruned",
+    );
+    assert.ok(
+      fs
+        .readdirSync(fingerprints)
+        .some((entry) => entry.startsWith("workspace-cache-fixture-")),
+      "The active workspace fingerprint must remain cached",
+    );
+    assert.ok(
+      fs.existsSync(
+        path.join(target, "deps", "libcached_dependency-2222222222222222.rlib"),
+      ),
+      "Cached dependency artifacts must remain",
+    );
+  }
 }
 console.log("Superseded workspace artifacts were pruned.");

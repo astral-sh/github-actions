@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -32,6 +34,51 @@ class ToolDirectoryTest(unittest.TestCase):
             self.assertEqual((live / "graph").read_bytes(), b"saved graph")
             self.assertFalse((live / "stale").exists())
             self.assertFalse(staged.exists())
+
+    def test_new_layout_invalidation_removes_only_matching_units(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "debug"
+            package = profile / "build" / "fixture"
+            script = package / "0123456789abcdef"
+            binary = package / "fedcba9876543210"
+            other = profile / "build" / "other" / "0123456789abcdef"
+            for unit, marker in (
+                (script, "run-build-script-build"),
+                (binary, "bin-fixture"),
+                (other, "run-build-script-build"),
+            ):
+                (unit / "fingerprint").mkdir(parents=True)
+                (unit / "fingerprint" / marker).touch()
+                (unit / "out").mkdir()
+                (unit / "out" / "generated").touch()
+            (script / "run").mkdir()
+            (script / "run" / "stdout").touch()
+            outside = root / "outside"
+            (outside / "fingerprint").mkdir(parents=True)
+            (outside / "fingerprint" / "run-build-script-build").touch()
+            try:
+                (package / "1111111111111111").symlink_to(
+                    outside, target_is_directory=True
+                )
+            except OSError as error:
+                self.skipTest(str(error))
+
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=True),
+                1,
+            )
+            self.assertFalse(script.exists())
+            self.assertTrue(binary.exists())
+            self.assertTrue(other.exists())
+            self.assertTrue(outside.exists())
+            self.assertEqual(
+                inputs.invalidate_units([profile], {"fixture"}, build_scripts_only=False),
+                1,
+            )
+            self.assertFalse(binary.exists())
+            self.assertTrue(other.exists())
+            self.assertTrue(outside.exists())
 
     def test_source_layout_ignores_build_outputs_and_detects_retargeted_links(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -190,7 +237,10 @@ class CargoInputsTest(unittest.TestCase):
 
     def test_changed_bytes_rebuild_when_cached_output_is_in_the_future(self) -> None:
         future = time.time_ns() + 60_000_000_000
-        for output in (self.root / "target/debug/build").glob("*/output"):
+        build = self.root / "target/debug/build"
+        outputs = [*build.glob("*/output"), *build.glob("*/*/run/stdout")]
+        self.assertTrue(outputs)
+        for output in outputs:
             os.utime(output, ns=(future, future))
         old = self.value.stat().st_mtime_ns
         self.value.write_text("changed")
@@ -230,6 +280,24 @@ class CargoInputsTest(unittest.TestCase):
         os.utime(head, ns=(1_000_000_000, 1_000_000_000))
         self.restore()
         self.assertEqual(head.stat().st_mtime_ns, 1_000_000_000)
+
+    def test_missing_manifest_invalidates_cached_workspace_units(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(inputs.__file__).resolve()),
+                "restore",
+                str(self.root / "missing-manifest.json"),
+                str(self.root / "target/debug"),
+            ],
+            cwd=self.root,
+            env=self.environment,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        self.assertGreater(json.loads(result.stdout)["invalidated_workspace_units"], 0)
+        self.build("original", rebuilt=True)
 
     def test_rejects_escaping_paths(self) -> None:
         with self.assertRaises(ValueError):
