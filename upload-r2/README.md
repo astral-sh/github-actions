@@ -19,6 +19,9 @@ combines the optional prefix and the file's relative path.
       *.zip.sha256
       *.tar.gz
       *.tar.gz.sha256
+      sha256.sum
+      *.sh
+      *.ps1
     cache-control: public, max-age=31536000, immutable
 ```
 
