@@ -31,7 +31,7 @@ combines the optional prefix and the file's relative path.
 | `prefix` | Optional. Key prefix. The action adds a trailing slash when needed. |
 | `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects at the selected keys. |
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
-| `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. When omitted, the action infers it from each filename. For NDJSON, set `application/x-ndjson`. |
+| `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. By default, the action uses the release mirror's extension map and falls back to `application/octet-stream`. For NDJSON, set `application/x-ndjson`. |
 | `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the same locked dependencies in an isolated uv environment. |
 
 For live uploads, pass R2 object read and write credentials for the bucket

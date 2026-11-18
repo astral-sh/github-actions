@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import mimetypes
 import os
 import random
 import time
@@ -33,6 +32,31 @@ PART_SIZE = 32 * MIB
 UPLOAD_CONCURRENCY = 4
 REQUEST_ATTEMPTS = 4
 MULTIPART_RESTART_ERRORS = {"InvalidPart", "NoSuchUpload"}
+
+# Match the media types used by astral-sh/release-mirror's backfill tool.
+EXTENSION_CONTENT_TYPES = (
+    (".tar.gz", "application/gzip"),
+    (".tar.zst", "application/zstd"),
+    (".tar.bz2", "application/x-bzip2"),
+    (".zip", "application/zip"),
+    (".gz", "application/gzip"),
+    (".zst", "application/zstd"),
+    (".exe", "application/octet-stream"),
+    (".msi", "application/octet-stream"),
+    (".dmg", "application/octet-stream"),
+    (".pkg", "application/octet-stream"),
+    (".sh", "application/x-shellscript"),
+    (".ps1", "application/x-powershell"),
+    (".sha256", "text/plain"),
+    (".sum", "text/plain"),
+)
+
+
+def content_type_for_filename(filename: str) -> str:
+    for extension, content_type in EXTENSION_CONTENT_TYPES:
+        if filename.endswith(extension):
+            return content_type
+    return "application/octet-stream"
 
 
 def retry_delay(attempt: int) -> float:
@@ -125,17 +149,11 @@ def upload_file(
 ) -> None:
     destination = f"s3://{bucket}/{upload.key}"
     target = {"Bucket": bucket, "Key": upload.key}
-    metadata = {}
+    metadata = {
+        "ContentType": content_type or content_type_for_filename(upload.path.name),
+    }
     if cache_control:
         metadata["CacheControl"] = cache_control
-    if not content_type:
-        content_type, encoding = mimetypes.guess_type(upload.path.name)
-        if encoding:
-            content_type = (
-                "application/gzip" if encoding == "gzip" else "application/octet-stream"
-            )
-    if content_type:
-        metadata["ContentType"] = content_type
 
     sessions = 2 if upload.size >= MULTIPART_THRESHOLD else 1
     try:

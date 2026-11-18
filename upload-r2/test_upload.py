@@ -119,23 +119,33 @@ class TransferTests(unittest.TestCase):
         self.s3.add_response("head_object", {}, last)
         self.upload()
 
-    def test_gzip_archive_uses_the_compressed_content_type(self):
-        target = self.asset("archive.tar.gz")
-        self.expect_missing_object(target)
-        self.s3.add_response(
-            "put_object",
-            {},
-            {
-                **target,
-                "CacheControl": CACHE_CONTROL,
-                "ContentType": "application/gzip",
-                "Body": ANY,
-            },
-        )
+    def test_content_types_follow_release_mirror_extensions(self):
+        for filename, content_type in (
+            ("archive.tar.gz", "application/gzip"),
+            ("archive.tar.zst", "application/zstd"),
+            ("archive.tar.bz2", "application/x-bzip2"),
+            ("archive.tar.gz.sha256", "text/plain"),
+            ("sha256.sum", "text/plain"),
+            ("installer.sh", "application/x-shellscript"),
+            ("installer.ps1", "application/x-powershell"),
+            ("SHA256SUMS", "application/octet-stream"),
+        ):
+            with self.subTest(filename=filename):
+                target = self.asset(filename)
+                self.expect_missing_object(target)
+                self.s3.add_response(
+                    "put_object",
+                    {},
+                    {
+                        **target,
+                        "CacheControl": CACHE_CONTROL,
+                        "ContentType": content_type,
+                        "Body": ANY,
+                    },
+                )
+                self.upload(include=filename)
 
-        self.upload(include="archive.tar.gz")
-
-    def test_explicit_content_type_overrides_inference_for_both_upload_methods(self):
+    def test_explicit_content_type_overrides_extension_for_both_upload_methods(self):
         small = self.asset("small.tar.gz")
         large = self.asset("z-large.tar.gz", MULTIPART_CONTENT)
         content_type = "application/x-ndjson"

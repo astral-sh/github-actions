@@ -24,7 +24,7 @@ inputs:
     description: Cache-Control header to set on uploaded objects.
     default: ""
   content-type:
-    description: Content-Type header to set on every uploaded object. Defaults to inferring it from the filename.
+    description: Content-Type header to set on every uploaded object. Defaults to a filename suffix lookup.
     default: ""
   dry-run:
     description: Validate and print the upload plan.
