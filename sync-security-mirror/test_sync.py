@@ -56,11 +56,10 @@ for index, argument in enumerate(arguments):
         if "push" in arguments and "TEST_RACE_SHA" in os.environ:
             import subprocess
 
-            subprocess.run(
-                [os.environ["TEST_GIT"], "-C", os.environ["TEST_DESTINATION"],
-                 "update-ref", "refs/heads/main", os.environ["TEST_RACE_SHA"]],
-                check=True,
-            )
+            git = [os.environ["TEST_GIT"], "-C", os.environ["TEST_DESTINATION"]]
+            race_sha = os.environ["TEST_RACE_SHA"]
+            update = ["refs/heads/main", race_sha] if race_sha else ["-d", "refs/heads/main"]
+            subprocess.run([*git, "update-ref", *update], check=True)
         arguments[index] = os.environ["TEST_DESTINATION_URL"]
 
 git = os.environ["TEST_GIT"]
@@ -143,6 +142,16 @@ os.execv(git, [git, *arguments])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Could not fast-forward", result.stderr)
         self.assertEqual(self.mirror_main(), later_commit)
+
+
+    def test_refuses_to_recreate_mirror_main_if_deleted_during_sync(self):
+        self.action_env["TEST_RACE_SHA"] = ""
+
+        result = self.sync(self.public_commit)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Could not fast-forward", result.stderr)
+        self.assertEqual(self.git("-C", str(self.destination), "for-each-ref", MAIN), "")
 
 
 if __name__ == "__main__":

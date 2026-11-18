@@ -8,7 +8,8 @@ The action builds a temporary bare clone from public `main` and uses a scoped
 token to read and update the mirror's `main` ref. It checks both commits against
 public history before it pushes. If the mirror already contains the requested
 commit, the action succeeds without pushing. A missing or divergent mirror ref
-fails the job. The action suppresses destination Git diagnostics to avoid
+fails the job. The push requires the mirror ref to still point to the validated
+commit. The action suppresses destination Git diagnostics to avoid
 exposing private refs in workflow logs.
 
 | Input | Required | Default | Description |

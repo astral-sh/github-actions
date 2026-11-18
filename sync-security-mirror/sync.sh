@@ -68,7 +68,10 @@ if ! git -C "$sync_repository" merge-base --is-ancestor "$destination_sha" "$SOU
     fail "Destination main has diverged from the requested public commit. Refusing to sync."
 fi
 
-if ! destination_git push --quiet --no-force --no-follow-tags \
+# The ancestry check above proves a fast-forward from this exact ref. Require
+# it at push time so a deleted or changed branch cannot be recreated or reset.
+if ! destination_git push --quiet --no-follow-tags \
+    --force-with-lease="refs/heads/main:$destination_sha" \
     "$destination_url" "$SOURCE_SHA:refs/heads/main" >/dev/null 2>&1; then
     fail "Could not fast-forward destination main."
 fi
