@@ -31,7 +31,6 @@ runs:
   using: composite
   steps:
     - name: Install uv
-      if: inputs.dry-run != 'true'
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       with:
         # renovate: datasource=github-release-attachments depName=astral-sh/uv
@@ -50,9 +49,4 @@ runs:
         R2_IF_EXISTS: ${{ inputs.if-exists }}
         R2_CACHE_CONTROL: ${{ inputs.cache-control }}
         R2_DRY_RUN: ${{ inputs.dry-run }}
-      run: |
-        if [[ "$R2_DRY_RUN" == true ]]; then
-          python3 "$GITHUB_ACTION_PATH/upload.py"
-        else
-          uv run --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"
-        fi
+      run: uv run --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"

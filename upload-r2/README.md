@@ -31,7 +31,7 @@ combines the optional prefix and the file's relative path.
 | `prefix` | Optional. Key prefix. The action adds a trailing slash when needed. |
 | `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects at the selected keys. |
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
-| `dry-run` | Set to `"true"` to validate and print the local upload plan. Uses runner Python 3.12 or later and works without R2 credentials or uv. |
+| `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Uses the same locked uv environment as live uploads. |
 
 For live uploads, pass R2 object read and write credentials for the bucket
 using the standard AWS SDK environment variables `AWS_ACCESS_KEY_ID` and
