@@ -12,7 +12,7 @@ from botocore.stub import ANY, Stubber
 from urllib3.response import HTTPResponse
 
 import transfer
-from upload import plan_uploads
+from upload import main, plan_uploads
 
 BUCKET = "mirror"
 PREFIX = "github/project/releases/download/v1/"
@@ -334,6 +334,35 @@ class HTTPRetryTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
+    def test_dry_run_preserves_existing_prefix_slashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory).resolve() / "release.zip"
+            path.touch()
+            env = {
+                "R2_ACCOUNT_ID": "a" * 32,
+                "R2_BUCKET": BUCKET,
+                "R2_SOURCE_DIRECTORY": directory,
+                "R2_INCLUDE": path.name,
+                "R2_IF_EXISTS": "skip",
+                "R2_DRY_RUN": "true",
+            }
+            for prefix, expected in (
+                ("", ""),
+                ("release", "release/"),
+                ("/", "/"),
+                ("release//", "release//"),
+            ):
+                with (
+                    self.subTest(prefix=prefix),
+                    patch.dict(os.environ, {**env, "R2_PREFIX": prefix}),
+                    patch("builtins.print") as log,
+                ):
+                    main()
+                    destination = f"s3://{BUCKET}/{expected}{path.name}"
+                    log.assert_called_once_with(
+                        f"Would upload {str(path)!r} to {destination!r}"
+                    )
+
     def test_selects_unique_files_and_preserves_subdirectories(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)

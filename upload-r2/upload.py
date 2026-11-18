@@ -65,8 +65,8 @@ def main() -> None:
     source = os.environ["R2_SOURCE_DIRECTORY"]
     if not source:
         raise ValueError("source-directory is required")
-    prefix = os.environ["R2_PREFIX"].rstrip("/")
-    if prefix:
+    prefix = os.environ["R2_PREFIX"]
+    if prefix and not prefix.endswith("/"):
         prefix += "/"
     if_exists = os.environ["R2_IF_EXISTS"]
     if if_exists not in {"skip", "overwrite"}:
