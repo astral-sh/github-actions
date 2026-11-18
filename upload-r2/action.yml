@@ -35,7 +35,6 @@ runs:
       with:
         # renovate: datasource=github-release-attachments depName=astral-sh/uv
         version: "0.13.6"
-        checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
         enable-cache: false
 
     - name: Upload files to R2
