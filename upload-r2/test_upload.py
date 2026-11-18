@@ -47,11 +47,11 @@ class TransferTests(unittest.TestCase):
         (self.directory / name).write_bytes(content)
         return {"Bucket": BUCKET, "Key": PREFIX + name}
 
-    def upload(self):
+    def upload(self, *, include="*.zip"):
         transfer.upload_files(
             self.client,
             BUCKET,
-            plan_uploads(self.directory, "*.zip", PREFIX),
+            plan_uploads(self.directory, include, PREFIX),
             skip_existing=True,
             cache_control=CACHE_CONTROL,
         )
@@ -116,6 +116,22 @@ class TransferTests(unittest.TestCase):
         self.s3.add_response("head_object", {}, first)
         self.s3.add_response("head_object", {}, last)
         self.upload()
+
+    def test_gzip_archive_uses_the_compressed_content_type(self):
+        target = self.asset("archive.tar.gz")
+        self.expect_missing_object(target)
+        self.s3.add_response(
+            "put_object",
+            {},
+            {
+                **target,
+                "CacheControl": CACHE_CONTROL,
+                "ContentType": "application/gzip",
+                "Body": ANY,
+            },
+        )
+
+        self.upload(include="archive.tar.gz")
 
     def test_invalid_part_restarts_the_entire_upload(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)

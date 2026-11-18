@@ -127,7 +127,11 @@ def upload_file(
     metadata = {}
     if cache_control:
         metadata["CacheControl"] = cache_control
-    content_type, _ = mimetypes.guess_type(upload.path.name)
+    content_type, encoding = mimetypes.guess_type(upload.path.name)
+    if encoding:
+        content_type = (
+            "application/gzip" if encoding == "gzip" else "application/octet-stream"
+        )
     if content_type:
         metadata["ContentType"] = content_type
 
