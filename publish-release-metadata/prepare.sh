@@ -5,9 +5,8 @@ if [[ ! "$PROJECT" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
   echo "::error::Project must be a lowercase name containing only letters, digits, underscores, or hyphens."
   exit 1
 fi
-if [[ ! "$RELEASE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] ||
-   ! git check-ref-format "refs/heads/update-versions/$PROJECT/$RELEASE"; then
-  echo "::error::Release must be a valid update-versions branch component."
+if [[ ! "$RELEASE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]]; then
+  echo "::error::Release must start with a letter or digit and contain only letters, digits, dots, underscores, plus signs, or hyphens."
   exit 1
 fi
 case "$MERGE_MODE" in
@@ -21,6 +20,15 @@ if [[ ! -f "$METADATA_FILE" ]]; then
   echo "::error::The metadata file must be a regular NDJSON file."
   exit 1
 fi
+
+# The destination ruleset protects branches matching update-versions-*.
+release_hash="$(printf '%s' "$RELEASE" | sha256sum)"
+branch="update-versions-$PROJECT-${release_hash:0:20}"
+ref="refs/heads/$branch"
+repository_url=https://github.com/astral-sh/versions.git
+export GIT_TERMINAL_PROMPT=0
+remote_ref="$(git -c credential.helper= ls-remote --refs "$repository_url" "$ref")"
+expected_head="${remote_ref%%$'\t'*}"
 
 staging_dir="$(mktemp -d "$RUNNER_TEMP/versions-update.XXXXXXXX")"
 trap 'rm -rf -- "$staging_dir"' EXIT
@@ -40,9 +48,8 @@ if [[ "${checksum_output%% *}" != "$tooling_sha256" ]]; then
   exit 1
 fi
 
-GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --quiet --depth 1 --no-tags \
-  --branch main --single-branch --no-recurse-submodules \
-  https://github.com/astral-sh/versions.git "$data"
+git -c credential.helper= clone --quiet --depth 1 --no-tags \
+  --branch main --single-branch --no-recurse-submodules "$repository_url" "$data"
 if [[ ! -d "$data/v1" || -L "$data/v1" || -L "$data/$versions_file" ]] ||
    [[ -e "$data/$versions_file" && ! -f "$data/$versions_file" ]]; then
   echo "::error::The versions checkout has an invalid metadata path."
@@ -56,11 +63,17 @@ if git -C "$data" diff --cached --quiet; then
   echo "Release metadata is already up to date."
   echo "changed=false" >> "$GITHUB_OUTPUT"
   exit 0
+else
+  diff_status=$?
+  if [[ "$diff_status" != 1 ]]; then
+    exit "$diff_status"
+  fi
 fi
 git -C "$data" diff --cached --check
 git -C "$data" -c user.name="astral-releases-bot[bot]" \
   -c user.email="328004183+astral-releases-bot[bot]@users.noreply.github.com" \
   commit --quiet -m "Update $PROJECT to version $RELEASE"
 
-printf 'changed=true\nstaging-dir=%s\n' "$staging_dir" >> "$GITHUB_OUTPUT"
+printf 'changed=true\nstaging-dir=%s\nbranch=%s\nexpected-head=%s\n' \
+  "$staging_dir" "$branch" "$expected_head" >> "$GITHUB_OUTPUT"
 trap - EXIT

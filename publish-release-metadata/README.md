@@ -2,7 +2,7 @@
 
 Use this action to update `v1/<project>.ndjson` in [astral-sh/versions](https://github.com/astral-sh/versions). It runs the registry's pinned insertion script to validate and merge prepared NDJSON, then opens or updates a pull request. An update already present on `main` exits successfully without creating a pull request.
 
-Run on a Linux runner with Bash, Git, GitHub CLI, curl, sha256sum, and Python 3.12 or newer. Prepare the NDJSON using the project's existing generator. For uv, Ruff, and ty, generate it from the cargo-dist plan using a reviewed revision of `convert-cargo-dist-plan.py`. Python Build Standalone can pass the NDJSON it already generates. The caller is responsible for release approval and for obtaining a token scoped to `astral-sh/versions` with `contents: write` and `pull_requests: write`. Pin the action to a commit SHA.
+Run on a Linux runner with Bash, Git, GitHub CLI, curl, sha256sum, and Python 3.12 or newer. Prepare the NDJSON using the project's existing generator. For uv, Ruff, and ty, generate it from the cargo-dist plan using a reviewed revision of `convert-cargo-dist-plan.py`. Python Build Standalone can pass the NDJSON it already generates. The caller is responsible for release approval and for obtaining a release bot installation token scoped to `astral-sh/versions` with `contents: write`, `pull_requests: write`, and permission to update the protected `update-versions-*` branches. Pin the action to a commit SHA.
 
 ```yaml
 - name: Publish metadata
@@ -23,6 +23,6 @@ Run on a Linux runner with Bash, Git, GitHub CLI, curl, sha256sum, and Python 3.
 | `token` | Yes | | Token scoped to the versions repository. |
 | `merge-mode` | No | `review` | Set `admin-squash` only when the caller's release policy permits bypassing review. The token must be allowed to bypass the destination's rules. |
 
-`changed` reports whether the prepared update differs from the versions `main` branch. When it is `true`, `pull-request-url` contains the created or reused PR URL. Each project and release uses a stable update branch, so reruns reuse its open PR. A rerun with the same proposed tree leaves the branch head intact. Updates use an explicit Git lease and fail if another run changes the branch during the update.
+`changed` reports whether the prepared update differs from the versions `main` branch. When it is `true`, `pull-request-url` contains the created or reused PR URL. Each project and release uses a stable update branch, so reruns reuse its open PR. A rerun with the same proposed tree and base leaves the branch head intact. Updates use an explicit Git lease from the start of preparation and fail if another run changes the branch during the update.
 
 The insertion script is fetched by commit SHA and checked against its expected SHA-256. The current versions checkout provides the data and base branch for the PR. The action runs the insertion script before passing the repository token to the publishing step.

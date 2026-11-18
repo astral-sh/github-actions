@@ -49,6 +49,9 @@ runs:
         RELEASE: ${{ inputs.release }}
         MERGE_MODE: ${{ inputs.merge-mode }}
         STAGING_DIR: ${{ steps.prepare.outputs.staging-dir }}
+        BRANCH: ${{ steps.prepare.outputs.branch }}
+        EXPECTED_HEAD: ${{ steps.prepare.outputs.expected-head }}
+        GH_HOST: github.com
         GH_TOKEN: ${{ inputs.token }}
         GH_PROMPT_DISABLED: '1'
         GIT_TERMINAL_PROMPT: '0'
