@@ -65,7 +65,7 @@ wheels = [
 [[package]]
 name = "upload-r2"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "botocore" },
     { name = "s3transfer" },

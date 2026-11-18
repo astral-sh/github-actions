@@ -82,7 +82,7 @@ def main() -> None:
             print(f"Would upload {str(upload.path)!r} to {destination!r}")
         return
 
-    from transfer import make_client, upload_files
+    from .transfer import make_client, upload_files
 
     with closing(make_client(account)) as client:
         upload_files(
@@ -95,7 +95,7 @@ def main() -> None:
         )
 
 
-if __name__ == "__main__":
+def cli() -> None:
     try:
         main()
     except (ValueError, RuntimeError, OSError) as error:

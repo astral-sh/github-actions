@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from botocore.awsrequest import AWSResponse
     from botocore.client import BaseClient
 
-    from upload import Upload
+    from .upload import Upload
 
 MIB = 1024**2
 MULTIPART_THRESHOLD = 100_000_000

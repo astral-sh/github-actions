@@ -60,4 +60,4 @@ the caller. If a checksum manifest must be published last, upload it in a
 subsequent step after the archives succeed.
 
 Run the tests locally with
-`uv run --locked --project upload-r2 python -B -m unittest discover -s upload-r2 -v`.
+`uv run --isolated --no-editable --locked --project upload-r2 python -m unittest discover -s upload-r2 -v`.

@@ -52,4 +52,5 @@ runs:
         R2_CACHE_CONTROL: ${{ inputs.cache-control }}
         R2_CONTENT_TYPE: ${{ inputs.content-type }}
         R2_DRY_RUN: ${{ inputs.dry-run }}
-      run: uv run --isolated --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"
+      # Keep the environment and installed package outside the upload source.
+      run: uv run --isolated --no-editable --locked --project "$GITHUB_ACTION_PATH" upload-r2

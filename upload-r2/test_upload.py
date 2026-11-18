@@ -11,8 +11,8 @@ from botocore.exceptions import ConnectionClosedError
 from botocore.stub import ANY, Stubber
 from urllib3.response import HTTPResponse
 
-import transfer
-from upload import main, plan_uploads
+from upload_r2 import transfer
+from upload_r2.upload import main, plan_uploads
 
 BUCKET = "mirror"
 PREFIX = "github/project/releases/download/v1/"
@@ -41,7 +41,7 @@ class TransferTests(unittest.TestCase):
         self.s3 = self.enterContext(Stubber(self.client))
         self.addCleanup(self.s3.assert_no_pending_responses)
         self.enterContext(patch.multiple(transfer, **MULTIPART_SETTINGS))
-        self.enterContext(patch("transfer.time.sleep"))
+        self.enterContext(patch.object(transfer.time, "sleep"))
 
     def asset(self, name, content=b"release asset"):
         (self.directory / name).write_bytes(content)
@@ -169,7 +169,7 @@ class TransferTests(unittest.TestCase):
                     "R2_DRY_RUN": "false",
                 },
             ),
-            patch("transfer.make_client", return_value=self.client),
+            patch.object(transfer, "make_client", return_value=self.client),
         ):
             main()
 
