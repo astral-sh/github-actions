@@ -61,9 +61,11 @@ class TransferTests(unittest.TestCase):
             "head_object", http_status_code=404, expected_params=target
         )
 
-    def multipart_attempt(self, target, upload_id, completion_error=None):
+    def multipart_attempt(
+        self, target, upload_id, completion_error=None, *, metadata=METADATA
+    ):
         self.s3.add_response(
-            "create_multipart_upload", {"UploadId": upload_id}, {**target, **METADATA}
+            "create_multipart_upload", {"UploadId": upload_id}, {**target, **metadata}
         )
         request = {**target, "UploadId": upload_id}
         parts = []
@@ -132,6 +134,33 @@ class TransferTests(unittest.TestCase):
         )
 
         self.upload(include="archive.tar.gz")
+
+    def test_explicit_content_type_overrides_inference_for_both_upload_methods(self):
+        small = self.asset("small.tar.gz")
+        large = self.asset("z-large.tar.gz", MULTIPART_CONTENT)
+        content_type = "application/x-ndjson"
+        metadata = {"CacheControl": CACHE_CONTROL, "ContentType": content_type}
+        self.s3.add_response("put_object", {}, {**small, **metadata, "Body": ANY})
+        self.multipart_attempt(large, "upload", metadata=metadata)
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "R2_ACCOUNT_ID": "a" * 32,
+                    "R2_BUCKET": BUCKET,
+                    "R2_SOURCE_DIRECTORY": str(self.directory),
+                    "R2_INCLUDE": "*.tar.gz",
+                    "R2_PREFIX": PREFIX,
+                    "R2_IF_EXISTS": "overwrite",
+                    "R2_CACHE_CONTROL": CACHE_CONTROL,
+                    "R2_CONTENT_TYPE": content_type,
+                    "R2_DRY_RUN": "false",
+                },
+            ),
+            patch("transfer.make_client", return_value=self.client),
+        ):
+            main()
 
     def test_invalid_part_restarts_the_entire_upload(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)

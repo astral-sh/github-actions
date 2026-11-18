@@ -121,17 +121,19 @@ def upload_file(
     *,
     skip_existing: bool,
     cache_control: str,
+    content_type: str,
 ) -> None:
     destination = f"s3://{bucket}/{upload.key}"
     target = {"Bucket": bucket, "Key": upload.key}
     metadata = {}
     if cache_control:
         metadata["CacheControl"] = cache_control
-    content_type, encoding = mimetypes.guess_type(upload.path.name)
-    if encoding:
-        content_type = (
-            "application/gzip" if encoding == "gzip" else "application/octet-stream"
-        )
+    if not content_type:
+        content_type, encoding = mimetypes.guess_type(upload.path.name)
+        if encoding:
+            content_type = (
+                "application/gzip" if encoding == "gzip" else "application/octet-stream"
+            )
     if content_type:
         metadata["ContentType"] = content_type
 
@@ -177,6 +179,7 @@ def upload_files(
     *,
     skip_existing: bool,
     cache_control: str,
+    content_type: str = "",
 ) -> None:
     if not uploads:
         return
@@ -208,6 +211,7 @@ def upload_files(
             bucket,
             skip_existing=skip_existing,
             cache_control=cache_control,
+            content_type=content_type,
         )
         for _ in executor.map(worker, uploads):
             pass

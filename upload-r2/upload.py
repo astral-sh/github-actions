@@ -91,6 +91,7 @@ def main() -> None:
             uploads,
             skip_existing=if_exists == "skip",
             cache_control=os.environ["R2_CACHE_CONTROL"],
+            content_type=os.environ.get("R2_CONTENT_TYPE", ""),
         )
 
 

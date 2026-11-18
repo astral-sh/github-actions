@@ -23,6 +23,9 @@ inputs:
   cache-control:
     description: Cache-Control header to set on uploaded objects.
     default: ""
+  content-type:
+    description: Content-Type header to set on every uploaded object. Defaults to inferring it from the filename.
+    default: ""
   dry-run:
     description: Validate and print the upload plan.
     default: "false"
@@ -47,5 +50,6 @@ runs:
         R2_PREFIX: ${{ inputs.prefix }}
         R2_IF_EXISTS: ${{ inputs.if-exists }}
         R2_CACHE_CONTROL: ${{ inputs.cache-control }}
+        R2_CONTENT_TYPE: ${{ inputs.content-type }}
         R2_DRY_RUN: ${{ inputs.dry-run }}
       run: uv run --isolated --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"
