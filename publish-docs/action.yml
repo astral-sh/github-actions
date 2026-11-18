@@ -1,0 +1,51 @@
+name: Publish built documentation
+description: Update a project site in astral-sh/docs and open a pull request.
+
+inputs:
+  source-directory:
+    description: Directory containing the built site, under the caller's workspace.
+    required: true
+  destination:
+    description: Project subtree in astral-sh/docs, in the form site/<project>.
+    required: true
+  publication-key:
+    description: Stable identifier for this update, such as a release tag or a preview ref.
+    required: true
+  title:
+    description: Title for a new pull request.
+    required: true
+  body:
+    description: Description for a new pull request.
+    default: Automated documentation update.
+  token:
+    description: Token scoped to astral-sh/docs with contents and pull requests write access.
+    required: true
+  merge-policy:
+    description: Use review to leave the pull request open or squash-admin to merge it.
+    default: review
+
+outputs:
+  changed:
+    description: Whether the built site differs from the checked-out base.
+    value: ${{ steps.publish.outputs.changed }}
+  pull-request-url:
+    description: URL of the pull request, empty when the site is already current.
+    value: ${{ steps.publish.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Publish documentation
+      id: publish
+      shell: bash
+      env:
+        DOCS_SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+        DOCS_DESTINATION: ${{ inputs.destination }}
+        DOCS_PUBLICATION_KEY: ${{ inputs.publication-key }}
+        DOCS_PR_TITLE: ${{ inputs.title }}
+        DOCS_PR_BODY: ${{ inputs.body }}
+        DOCS_MERGE_POLICY: ${{ inputs.merge-policy }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_PROMPT_DISABLED: "1"
+        GIT_TERMINAL_PROMPT: "0"
+      run: python3 "$GITHUB_ACTION_PATH/publish.py"
