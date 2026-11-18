@@ -33,7 +33,7 @@ UPLOAD_CONCURRENCY = 4
 REQUEST_ATTEMPTS = 4
 MULTIPART_RESTART_ERRORS = {"InvalidPart", "NoSuchUpload"}
 
-# Match the media types used by astral-sh/release-mirror's backfill tool.
+# Use the backfill tool's media types plus NDJSON for release metadata.
 EXTENSION_CONTENT_TYPES = (
     (".tar.gz", "application/gzip"),
     (".tar.zst", "application/zstd"),
@@ -47,6 +47,7 @@ EXTENSION_CONTENT_TYPES = (
     (".pkg", "application/octet-stream"),
     (".sh", "application/x-shellscript"),
     (".ps1", "application/x-powershell"),
+    (".ndjson", "application/x-ndjson"),
     (".sha256", "text/plain"),
     (".sum", "text/plain"),
 )

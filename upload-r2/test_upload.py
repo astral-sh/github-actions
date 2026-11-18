@@ -119,7 +119,7 @@ class TransferTests(unittest.TestCase):
         self.s3.add_response("head_object", {}, last)
         self.upload()
 
-    def test_content_types_follow_release_mirror_extensions(self):
+    def test_content_types_follow_filename_extensions(self):
         for filename, content_type in (
             ("archive.tar.gz", "application/gzip"),
             ("archive.tar.zst", "application/zstd"),
@@ -128,6 +128,7 @@ class TransferTests(unittest.TestCase):
             ("sha256.sum", "text/plain"),
             ("installer.sh", "application/x-shellscript"),
             ("installer.ps1", "application/x-powershell"),
+            ("versions.ndjson", "application/x-ndjson"),
             ("SHA256SUMS", "application/octet-stream"),
         ):
             with self.subTest(filename=filename):
