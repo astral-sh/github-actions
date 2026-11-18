@@ -21,6 +21,8 @@ from botocore.exceptions import (
 )
 from s3transfer.manager import TransferConfig, TransferManager
 
+from .checksum import crc32_checksum, crc64nvme_checksum
+
 if TYPE_CHECKING:
     from botocore.awsrequest import AWSResponse
     from botocore.client import BaseClient
@@ -120,13 +122,75 @@ def is_transient_error(error: Exception) -> bool:
     return isinstance(error, (ConnectionError, HTTPClientError))
 
 
-def head_object(client: BaseClient, target: dict[str, str]) -> dict | None:
+def head_object(
+    client: BaseClient, target: dict[str, str], *, read_checksum: bool
+) -> dict | None:
+    options = {"ChecksumMode": "ENABLED"} if read_checksum else {}
     try:
-        return client.head_object(**target)
+        return client.head_object(**target, **options)
     except ClientError as error:
         if error.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
             return None
         raise
+
+
+def verify_skip(
+    client: BaseClient, target: dict[str, str], upload: Upload, existing: dict
+) -> None:
+    destination = f"s3://{target['Bucket']}/{target['Key']}"
+    remote_size = existing.get("ContentLength")
+    if remote_size is not None and remote_size != upload.size:
+        raise RuntimeError(
+            f"Size mismatch for {destination!r}: local file has {upload.size} bytes, "
+            f"existing object has {remote_size} bytes"
+        )
+
+    if expected := existing.get("ChecksumCRC64NVME"):
+        algorithm = "CRC64/NVME"
+        actual = crc64nvme_checksum(upload.path)
+    elif expected := existing.get("ChecksumCRC32"):
+        algorithm = "CRC32"
+        parts = ()
+        if "-" in expected:
+            parts = multipart_layout(client, target, upload.size, existing, expected)
+        actual = crc32_checksum(upload.path, upload.size, parts=parts)
+    else:
+        print(f"Skipping existing {destination!r} without a supported checksum")
+        return
+
+    if actual != expected:
+        raise RuntimeError(
+            f"{algorithm} mismatch for {destination!r}: "
+            f"local checksum {actual!r}, existing checksum {expected!r}"
+        )
+    print(f"Skipping existing {destination!r} after verifying {algorithm}")
+
+
+def multipart_layout(
+    client: BaseClient,
+    target: dict[str, str],
+    size: int,
+    existing: dict,
+    checksum: str,
+) -> tuple[int, ...]:
+    destination = f"s3://{target['Bucket']}/{target['Key']}"
+    part_count = checksum.rpartition("-")[2]
+    etag = existing.get("ETag")
+    if not etag or not part_count.isascii() or not part_count.isdecimal():
+        raise RuntimeError(f"Cannot verify multipart checksum for {destination!r}")
+    count = int(part_count)
+    if not 1 <= count <= 10_000:
+        raise RuntimeError(f"Invalid checksum part count for {destination!r}: {count}")
+
+    first = client.head_object(**target, PartNumber=1, IfMatch=etag)
+    part_size = first.get("ContentLength")
+    if part_size is None or first.get("PartsCount", count) != count:
+        raise RuntimeError(f"Invalid multipart layout for {destination!r}")
+    # R2 uses equal-sized parts except for the final part.
+    last_size = size - (count - 1) * part_size
+    if not 0 <= last_size <= part_size or (part_size == 0 and count > 1):
+        raise RuntimeError(f"Invalid multipart layout for {destination!r}")
+    return (part_size,) * (count - 1) + (last_size,)
 
 
 def add_write_condition(
@@ -160,9 +224,9 @@ def upload_file(
 
     sessions = 2 if upload.size >= MULTIPART_THRESHOLD else 1
     try:
-        existing = head_object(client, target)
+        existing = head_object(client, target, read_checksum=skip_existing)
         if skip_existing and existing is not None:
-            print(f"Skipping existing {destination!r}")
+            verify_skip(client, target, upload, existing)
             return
 
         etag = existing.get("ETag") if existing is not None else None
@@ -193,30 +257,27 @@ def upload_file(
                 # A bucket lock can take precedence over the precondition. Check
                 # for a committed object after a lock or an ambiguous failure.
                 check_destination = can_restart or code == "ObjectLockedByBucketPolicy"
-                if skip_existing and (
-                    code == "PreconditionFailed"
-                    or (check_destination and head_object(client, target) is not None)
-                ):
-                    print(f"Skipping existing {destination!r}")
-                    return
-                if write_id is not None and (
-                    check_destination or code == "PreconditionFailed"
-                ):
-                    current = head_object(client, target)
-                    if current is not None and (
-                        current.get("Metadata", {}).get(WRITE_ID_METADATA_KEY)
-                        == write_id
-                    ):
-                        print(f"Confirmed upload to {destination!r}")
-                        return
-                    current_etag = (
-                        current.get("ETag", "") if current is not None else None
-                    )
-                    if code == "PreconditionFailed" or current_etag != etag:
-                        raise RuntimeError(
-                            f"Upload conflict for {destination!r}: "
-                            "the destination changed during the upload"
-                        ) from error
+                if check_destination or code == "PreconditionFailed":
+                    current = head_object(client, target, read_checksum=skip_existing)
+                    if skip_existing:
+                        if current is not None:
+                            verify_skip(client, target, upload, current)
+                            return
+                    else:
+                        if current is not None and (
+                            current.get("Metadata", {}).get(WRITE_ID_METADATA_KEY)
+                            == write_id
+                        ):
+                            print(f"Confirmed upload to {destination!r}")
+                            return
+                        current_etag = (
+                            current.get("ETag", "") if current is not None else None
+                        )
+                        if code == "PreconditionFailed" or current_etag != etag:
+                            raise RuntimeError(
+                                f"Upload conflict for {destination!r}: "
+                                "the destination changed during the upload"
+                            ) from error
                 if session == sessions or not can_restart:
                     raise
                 print(f"Restarting multipart upload for {destination!r}: {error}")

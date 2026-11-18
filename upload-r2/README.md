@@ -32,7 +32,7 @@ combines the optional prefix and the file's relative path.
 | `account-id` | Required. Cloudflare account ID. |
 | `bucket` | Required. R2 bucket name. |
 | `prefix` | Optional. Key prefix. The action adds a trailing slash when needed. |
-| `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects conditionally. |
+| `if-exists` | `skip` (default) checks existing objects and uploads missing keys. `overwrite` replaces objects conditionally. |
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
 | `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. The default uses the release mirror's extension map, with `application/x-ndjson` for `.ndjson` and `application/octet-stream` for unknown extensions. |
 | `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the action's locked uv environment. |
@@ -45,8 +45,12 @@ using the standard AWS SDK environment variables `AWS_ACCESS_KEY_ID` and
 
 The default mode checks each target key with `HeadObject` and uses conditional
 writes to protect against concurrent uploads of the same key. Rerun a versioned
-upload with the same release files. Existing objects are skipped by key, so
-their contents are assumed to match the release.
+upload with the same release files. For an existing object, the action checks
+the size and prefers CRC64/NVME, falling back to CRC32. For composite CRC32, it
+looks up the stored first part's size with a second `HeadObject` and reads the
+local file using that part size. A size or checksum mismatch fails the upload
+step. When R2 supplies neither checksum, the action logs that verification is
+unavailable and skips the existing key.
 
 In `overwrite` mode, R2 replaces an object only if its ETag at commit matches
 the ETag read before uploading. If the action found no object, R2 creates it

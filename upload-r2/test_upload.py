@@ -19,12 +19,17 @@ BUCKET = "mirror"
 PREFIX = "github/project/releases/download/v1/"
 CACHE_CONTROL = "public, max-age=31536000, immutable"
 METADATA = {"CacheControl": CACHE_CONTROL, "ContentType": "application/zip"}
+RELEASE_HEAD = {"ContentLength": 13, "ChecksumCRC64NVME": "jF2KaqItVgI="}
 MISSING_OBJECT = (404, {}, b"")
 DISCONNECT = b"<Error><Code>ClientDisconnect</Code></Error>"
 PRECONDITION_FAILED = (412, {}, b"<Error><Code>PreconditionFailed</Code></Error>")
 WRITE_ID_HEADER = f"x-amz-meta-{transfer.WRITE_ID_METADATA_KEY}"
 MULTIPART_PART_SIZE = 5 * transfer.MIB
 MULTIPART_CONTENT = b"a" * MULTIPART_PART_SIZE + b"ef"
+MULTIPART_HEAD = {
+    "ContentLength": len(MULTIPART_CONTENT),
+    "ChecksumCRC64NVME": "MQ+Gtmmci1c=",
+}
 MULTIPART_SETTINGS = {
     "MULTIPART_THRESHOLD": len(MULTIPART_CONTENT),
     "PART_SIZE": MULTIPART_PART_SIZE,
@@ -59,9 +64,15 @@ class TransferTests(unittest.TestCase):
             cache_control=CACHE_CONTROL,
         )
 
-    def expect_missing_object(self, target):
+    def expect_missing_object(self, target, *, read_checksum=True):
+        options = {"ChecksumMode": "ENABLED"} if read_checksum else {}
         self.s3.add_client_error(
-            "head_object", http_status_code=404, expected_params=target
+            "head_object", http_status_code=404, expected_params={**target, **options}
+        )
+
+    def expect_existing_object(self, target, response):
+        self.s3.add_response(
+            "head_object", response, {**target, "ChecksumMode": "ENABLED"}
         )
 
     def multipart_attempt(
@@ -113,13 +124,62 @@ class TransferTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, r"b\.zip.*AccessDenied"):
             self.upload()
 
-        self.s3.add_response("head_object", {}, first)
+        self.expect_existing_object(first, RELEASE_HEAD)
         self.expect_missing_object(last)
         self.s3.add_response("put_object", {}, put_last)
         self.upload()
 
-        self.s3.add_response("head_object", {}, first)
-        self.s3.add_response("head_object", {}, last)
+        self.expect_existing_object(first, RELEASE_HEAD)
+        self.expect_existing_object(last, RELEASE_HEAD)
+        self.upload()
+
+    def test_crc64nvme_takes_precedence_over_crc32(self):
+        target = self.asset("a.zip", b"123456789")
+        self.expect_existing_object(
+            target,
+            {
+                "ContentLength": 9,
+                "ChecksumCRC64NVME": "rosUhgp5mIg=",
+                "ChecksumCRC32": "AAAAAA==",
+            },
+        )
+        self.upload()
+
+    def test_skips_matching_full_object_crc32(self):
+        target = self.asset("a.zip", b"123456789")
+        self.expect_existing_object(
+            target, {"ContentLength": 9, "ChecksumCRC32": "y/Q5Jg=="}
+        )
+        self.upload()
+
+    def test_composite_crc32_uses_the_stored_part_layout(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        etag = '"stored-2"'
+        self.expect_existing_object(
+            target,
+            {
+                "ETag": etag,
+                "ContentLength": len(MULTIPART_CONTENT),
+                "ChecksumCRC32": "k0TTjQ==-2",
+            },
+        )
+        self.s3.add_response(
+            "head_object",
+            {"ContentLength": MULTIPART_PART_SIZE, "PartsCount": 2},
+            {**target, "PartNumber": 1, "IfMatch": etag},
+        )
+        with patch.object(transfer, "PART_SIZE", 2 * MULTIPART_PART_SIZE):
+            self.upload()
+
+    def test_different_size_fails_even_when_no_checksum_is_available(self):
+        target = self.asset("a.zip")
+        self.expect_existing_object(target, {"ContentLength": 1})
+        with self.assertRaisesRegex(RuntimeError, r"Size mismatch.*a\.zip"):
+            self.upload()
+
+    def test_skips_same_size_when_no_supported_checksum_is_available(self):
+        target = self.asset("a.zip")
+        self.expect_existing_object(target, {"ContentLength": 13})
         self.upload()
 
     def test_content_types_follow_filename_extensions(self):
@@ -158,9 +218,9 @@ class TransferTests(unittest.TestCase):
             "ContentType": content_type,
             "Metadata": ANY,
         }
-        self.expect_missing_object(small)
+        self.expect_missing_object(small, read_checksum=False)
         self.s3.add_response("put_object", {}, {**small, **metadata, "Body": ANY})
-        self.expect_missing_object(large)
+        self.expect_missing_object(large, read_checksum=False)
         self.multipart_attempt(large, "upload", metadata=metadata)
 
         with (
@@ -197,9 +257,7 @@ class TransferTests(unittest.TestCase):
         self.expect_missing_object(target)
         request = self.multipart_attempt(target, "committed", ("InvalidPart", 400))
         self.s3.add_response("abort_multipart_upload", {}, request)
-        self.s3.add_response(
-            "head_object", {"ContentLength": len(MULTIPART_CONTENT)}, target
-        )
+        self.expect_existing_object(target, MULTIPART_HEAD)
 
         self.upload()
 
@@ -221,9 +279,7 @@ class TransferTests(unittest.TestCase):
             target, "racing", ("ObjectLockedByBucketPolicy", 409)
         )
         self.s3.add_response("abort_multipart_upload", {}, request)
-        self.s3.add_response(
-            "head_object", {"ContentLength": len(MULTIPART_CONTENT)}, target
-        )
+        self.expect_existing_object(target, MULTIPART_HEAD)
 
         self.upload()
 
@@ -249,7 +305,23 @@ class TransferTests(unittest.TestCase):
             http_status_code=412,
             expected_params={**target, **METADATA, "Body": ANY},
         )
+        self.expect_existing_object(target, RELEASE_HEAD)
         self.upload()
+
+    def test_precondition_failure_rejects_different_bytes(self):
+        target = self.asset("a.zip")
+        self.expect_missing_object(target)
+        self.s3.add_client_error(
+            "put_object",
+            service_error_code="PreconditionFailed",
+            http_status_code=412,
+            expected_params={**target, **METADATA, "Body": ANY},
+        )
+        self.expect_existing_object(
+            target, {"ContentLength": 13, "ChecksumCRC32": "AAAAAA=="}
+        )
+        with self.assertRaisesRegex(RuntimeError, r"CRC32 mismatch.*a\.zip"):
+            self.upload()
 
 
 class HTTPRetryTests(unittest.TestCase):
@@ -416,13 +488,16 @@ class HTTPRetryTests(unittest.TestCase):
                 None,  # The first PUT committed and its response was lost.
                 (409, {}, b"<Error><Code>ObjectLockedByBucketPolicy</Code></Error>"),
                 (503, {}, b""),
-                (200, {"content-length": "6"}, b""),
+                (200, {"content-length": "6", "x-amz-checksum-crc32": "S4457w=="}, b""),
             ]
         )
         self.assertEqual(
             [request.method for request, _ in self.requests],
             ["HEAD", "PUT", "PUT", "HEAD", "HEAD"],
         )
+        for request, _ in self.requests:
+            if request.method == "HEAD":
+                self.assertEqual(request.headers["x-amz-checksum-mode"], b"ENABLED")
 
     def test_retries_a_part_and_recovers_a_lost_completion_response(self):
         (self.directory / "release.zip").write_bytes(MULTIPART_CONTENT)
