@@ -109,17 +109,11 @@ def make_client(account_id: str) -> BaseClient:
     return client
 
 
-def error_code(error: Exception) -> str:
-    if isinstance(error, ClientError):
-        return error.response["Error"]["Code"]
-    return ""
-
-
 def is_transient_error(error: Exception) -> bool:
     if isinstance(error, ClientError):
         status = error.response["ResponseMetadata"]["HTTPStatusCode"]
         return status in {500, 502, 503, 504} or is_retryable_r2_response(
-            status, error_code(error)
+            status, error.response["Error"]["Code"]
         )
     return isinstance(error, (ConnectionError, HTTPClientError))
 
@@ -170,7 +164,11 @@ def upload_file(
                 ).result()
                 return
             except (BotoCoreError, ClientError) as error:
-                code = error_code(error)
+                code = (
+                    error.response["Error"]["Code"]
+                    if isinstance(error, ClientError)
+                    else None
+                )
                 can_restart = (
                     code in MULTIPART_RESTART_ERRORS or is_transient_error(error)
                 )
