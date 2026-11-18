@@ -9,7 +9,7 @@ Replace a project's subtree in `astral-sh/docs` and open or reuse a pull request
 | `publication-key` | Stable identifier for a logical update, such as a release tag or a preview ref. Use the same key on retries and separate keys for release and preview updates. |
 | `title` | Title for a new pull request. |
 | `body` | Description for a new pull request. Defaults to `Automated documentation update.` |
-| `token` | GitHub token scoped to `astral-sh/docs` with `contents: write` and `pull_requests: write`. |
+| `token` | Release bot installation token scoped to `astral-sh/docs` with `contents: write`, `pull_requests: write`, and permission to update the protected `update-docs-*` branches. |
 | `merge-policy` | `review` leaves the PR open and is the default. `squash-admin` requests an immediate admin squash merge of the exact commit published by the action. Use it in a caller's already approved release path with a token authorized to bypass the repository's rules. |
 
 Outputs are `changed` and `pull-request-url`. An identical site on `main` returns `false` and an empty URL. When there are changes, the action adds the `documentation` label and reuses the open PR for that destination and publication key. Subsequent updates preserve the PR title and description. A Git lease rejects overwriting a branch that another run changed during publication. Callers should serialize updates to the same project site when publishing order matters.
@@ -35,7 +35,7 @@ Run this in the caller's docs publishing job after building the site. Use the sa
   with:
     source-directory: site/uv
     destination: site/uv
-    publication-key: preview-${{ github.sha }}
+    publication-key: preview-${{ github.ref }}
     title: Update uv documentation
     token: ${{ steps.docs-token.outputs.token }}
     merge-policy: review

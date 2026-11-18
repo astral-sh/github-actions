@@ -48,6 +48,9 @@ if args[:3] == ["api", "--hostname", "github.com"]:
             ["git", "--git-dir", os.environ["TEST_REMOTE"], "rev-parse", pr["head"]["ref"]],
             text=True,
         ).strip()
+        if os.environ.get("TEST_STALE_HEAD") and not state.get("reported_stale_head"):
+            state["reported_stale_head"] = True
+            sha = "0" * 40
         print(json.dumps({"head": {"sha": sha}, "merged": False, "mergeable": True}))
     elif route.startswith("repos/astral-sh/docs/issues/") and method == "POST":
         state["labels"][route.split("/")[4]] = fields["labels[]"]
@@ -133,7 +136,7 @@ class PublishDocsTest(unittest.TestCase):
 
     def branch(self, project="uv", key="release-1"):
         update_id = hashlib.sha256(key.encode()).hexdigest()[:20]
-        return f"automation/docs/{project}/{update_id}"
+        return f"update-docs-{project}-{update_id}"
 
     def test_replaces_only_the_target_subtree_and_reuses_the_pull_request(self):
         branch = self.branch()
@@ -159,6 +162,15 @@ class PublishDocsTest(unittest.TestCase):
             "1", "--repo", "github.com/astral-sh/docs", "--squash",
             "--admin", "--match-head-commit", updated_commit,
         ]])
+
+    def test_admin_merge_waits_for_the_published_head(self):
+        self.run_action(DOCS_MERGE_POLICY="squash-admin", TEST_STALE_HEAD="1")
+
+        state = json.loads(self.state_path.read_text())
+        head = self.git("--git-dir", str(self.remote), "rev-parse", self.branch())
+        self.assertTrue(state["reported_stale_head"])
+        self.assertEqual(len(state["merges"]), 1)
+        self.assertEqual(state["merges"][0][-2:], ["--match-head-commit", head])
 
     def test_sites_and_publication_keys_get_separate_branches(self):
         self.run_action()

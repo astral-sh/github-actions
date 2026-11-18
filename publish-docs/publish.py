@@ -127,19 +127,19 @@ def merge_exact(number: int, commit: str) -> None:
     # GitHub computes mergeability asynchronously after a PR is created or updated.
     for attempt in range(6):
         pull_request = json.loads(api("GET", f"pulls/{number}").stdout)
-        if pull_request["head"]["sha"] != commit:
-            raise ValueError("The pull request head changed before merging")
-        if pull_request["merged"]:
-            return
-        if pull_request["mergeable"] is not None:
-            capture(
-                "gh", "pr", "merge", str(number), "--repo", f"github.com/{REPOSITORY}",
-                "--squash", "--admin", "--match-head-commit", commit,
-            )
-            return
+        # The API can still report the previous head immediately after a push.
+        if pull_request["head"]["sha"] == commit:
+            if pull_request["merged"]:
+                return
+            if pull_request["mergeable"] is not None:
+                capture(
+                    "gh", "pr", "merge", str(number), "--repo", f"github.com/{REPOSITORY}",
+                    "--squash", "--admin", "--match-head-commit", commit,
+                )
+                return
         if attempt < 5:
             time.sleep(2)
-    raise ValueError("GitHub has not computed mergeability. Retry the update.")
+    raise ValueError("GitHub did not report mergeability for the published commit. Retry the update.")
 
 
 def publish(checkout: Path, source: Path, destination: str, branch: str, merge_policy: str) -> str:
@@ -185,7 +185,8 @@ def main() -> None:
     source = built_site(workspace, os.environ["DOCS_SOURCE_DIRECTORY"])
     update_id = hashlib.sha256(publication_key.encode()).hexdigest()[:20]
     project = destination.removeprefix("site/")
-    branch = f"automation/docs/{project}/{update_id}"
+    # The destination ruleset protects branches matching update-docs-*.
+    branch = f"update-docs-{project}-{update_id}"
     with tempfile.TemporaryDirectory(prefix="publish-docs-", dir=os.environ["RUNNER_TEMP"]) as directory:
         url = publish(Path(directory) / "docs", source, destination, branch, merge_policy)
 
