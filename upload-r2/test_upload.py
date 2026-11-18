@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from botocore.awsrequest import AWSResponse
-from botocore.exceptions import ClientError, ConnectionClosedError
+from botocore.exceptions import ConnectionClosedError
 from botocore.stub import ANY, Stubber
 from urllib3.response import HTTPResponse
 
@@ -17,9 +17,8 @@ from upload import plan_uploads
 BUCKET = "mirror"
 PREFIX = "github/project/releases/download/v1/"
 CACHE_CONTROL = "public, max-age=31536000, immutable"
-LIST = {"Bucket": BUCKET, "Prefix": PREFIX}
 METADATA = {"CacheControl": CACHE_CONTROL, "ContentType": "application/zip"}
-EMPTY_LIST = b"<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"
+MISSING_OBJECT = (404, {}, b"")
 DISCONNECT = b"<Error><Code>ClientDisconnect</Code></Error>"
 MULTIPART_PART_SIZE = 5 * transfer.MIB
 MULTIPART_CONTENT = b"a" * MULTIPART_PART_SIZE + b"ef"
@@ -52,17 +51,14 @@ class TransferTests(unittest.TestCase):
         transfer.upload_files(
             self.client,
             BUCKET,
-            PREFIX,
             plan_uploads(self.directory, "*.zip", PREFIX),
             skip_existing=True,
             cache_control=CACHE_CONTROL,
         )
 
-    def list_objects(self, *keys):
-        self.s3.add_response(
-            "list_objects_v2",
-            {"Contents": [{"Key": key} for key in keys]},
-            LIST,
+    def expect_missing_object(self, target):
+        self.s3.add_client_error(
+            "head_object", http_status_code=404, expected_params=target
         )
 
     def multipart_attempt(self, target, upload_id, completion_error=None):
@@ -100,8 +96,9 @@ class TransferTests(unittest.TestCase):
         last = self.asset("b.zip")
         put_first = {**first, **METADATA, "Body": ANY}
         put_last = {**last, **METADATA, "Body": ANY}
-        self.list_objects()
+        self.expect_missing_object(first)
         self.s3.add_response("put_object", {}, put_first)
+        self.expect_missing_object(last)
         self.s3.add_client_error(
             "put_object",
             service_error_code="AccessDenied",
@@ -111,37 +108,28 @@ class TransferTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, r"b\.zip.*AccessDenied"):
             self.upload()
 
-        self.s3.add_response(
-            "list_objects_v2",
-            {"IsTruncated": True, "NextContinuationToken": "page-2"},
-            LIST,
-        )
-        self.s3.add_response(
-            "list_objects_v2",
-            {"Contents": [{"Key": first["Key"]}]},
-            {**LIST, "ContinuationToken": "page-2"},
-        )
+        self.s3.add_response("head_object", {}, first)
+        self.expect_missing_object(last)
         self.s3.add_response("put_object", {}, put_last)
         self.upload()
 
-        self.list_objects(first["Key"], last["Key"])
+        self.s3.add_response("head_object", {}, first)
+        self.s3.add_response("head_object", {}, last)
         self.upload()
 
     def test_invalid_part_restarts_the_entire_upload(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)
-        self.list_objects()
+        self.expect_missing_object(target)
         request = self.multipart_attempt(target, "failed", ("InvalidPart", 400))
         self.s3.add_response("abort_multipart_upload", {}, request)
-        self.s3.add_client_error(
-            "head_object", http_status_code=404, expected_params=target
-        )
+        self.expect_missing_object(target)
         self.multipart_attempt(target, "replacement")
 
         self.upload()
 
     def test_invalid_part_skips_committed_object(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)
-        self.list_objects()
+        self.expect_missing_object(target)
         request = self.multipart_attempt(target, "committed", ("InvalidPart", 400))
         self.s3.add_response("abort_multipart_upload", {}, request)
         self.s3.add_response(
@@ -152,20 +140,18 @@ class TransferTests(unittest.TestCase):
 
     def test_multipart_retries_are_bounded(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)
-        self.list_objects()
+        self.expect_missing_object(target)
         for upload_id in ("first", "second"):
             request = self.multipart_attempt(target, upload_id, ("InvalidPart", 400))
             self.s3.add_response("abort_multipart_upload", {}, request)
-            self.s3.add_client_error(
-                "head_object", http_status_code=404, expected_params=target
-            )
+            self.expect_missing_object(target)
 
         with self.assertRaisesRegex(RuntimeError, "InvalidPart"):
             self.upload()
 
     def test_concurrent_multipart_write_hits_bucket_lock(self):
         target = self.asset("large.zip", MULTIPART_CONTENT)
-        self.list_objects()
+        self.expect_missing_object(target)
         request = self.multipart_attempt(
             target, "racing", ("ObjectLockedByBucketPolicy", 409)
         )
@@ -178,22 +164,20 @@ class TransferTests(unittest.TestCase):
 
     def test_bucket_lock_without_an_existing_key_is_an_error(self):
         target = self.asset("a.zip")
-        self.list_objects()
+        self.expect_missing_object(target)
         self.s3.add_client_error(
             "put_object",
             service_error_code="ObjectLockedByBucketPolicy",
             http_status_code=409,
             expected_params={**target, **METADATA, "Body": ANY},
         )
-        self.s3.add_client_error(
-            "head_object", http_status_code=404, expected_params=target
-        )
+        self.expect_missing_object(target)
         with self.assertRaisesRegex(RuntimeError, "ObjectLockedByBucketPolicy"):
             self.upload()
 
     def test_precondition_failure_skips_a_concurrent_write(self):
         target = self.asset("a.zip")
-        self.list_objects()
+        self.expect_missing_object(target)
         self.s3.add_client_error(
             "put_object",
             service_error_code="PreconditionFailed",
@@ -240,19 +224,18 @@ class HTTPRetryTests(unittest.TestCase):
             transfer.upload_files(
                 self.client,
                 BUCKET,
-                PREFIX,
                 plan_uploads(self.directory, "*.zip", PREFIX),
                 skip_existing=skip_existing,
                 cache_control=CACHE_CONTROL,
             )
         self.assertEqual(list(responses), [])
 
-    def test_retries_listing_and_rewinds_a_single_put(self):
+    def test_retries_head_and_rewinds_a_single_put(self):
         self.upload(
             [
                 (503, {}, b"<Error><Code>ServiceUnavailable</Code></Error>"),
                 (429, {}, b"<Error><Code>TooManyRequests</Code></Error>"),
-                (200, {}, EMPTY_LIST),
+                MISSING_OBJECT,
                 (400, {}, b"<Error><Code>IncompleteBody</Code></Error>"),
                 (400, {}, DISCONNECT),
                 (200, {"etag": '"release"'}, b""),
@@ -260,7 +243,7 @@ class HTTPRetryTests(unittest.TestCase):
         )
         self.assertEqual(
             [request.method for request, _ in self.requests],
-            ["GET", "GET", "GET", "PUT", "PUT", "PUT"],
+            ["HEAD", "HEAD", "HEAD", "PUT", "PUT", "PUT"],
         )
         for request, body in self.requests[3:]:
             self.assertEqual(request.headers["If-None-Match"], b"*")
@@ -268,20 +251,20 @@ class HTTPRetryTests(unittest.TestCase):
 
     def test_persistent_throttling_stops_at_request_limit(self):
         throttled = (429, {}, b"<Error><Code>TooManyRequests</Code></Error>")
-        with self.assertRaisesRegex(ClientError, "TooManyRequests"):
+        with self.assertRaisesRegex(RuntimeError, "TooManyRequests"):
             self.upload([throttled] * transfer.REQUEST_ATTEMPTS)
         self.assertEqual(
             [request.method for request, _ in self.requests],
-            ["GET"] * transfer.REQUEST_ATTEMPTS,
+            ["HEAD"] * transfer.REQUEST_ATTEMPTS,
         )
 
-    def test_overwrite_skips_listing_and_writes_unconditionally(self):
+    def test_overwrite_writes_unconditionally_without_lookup(self):
         uploaded = (200, {"etag": '"release"'}, b"")
-        self.upload([(200, {}, EMPTY_LIST), uploaded])
+        self.upload([MISSING_OBJECT, uploaded])
         self.upload([uploaded], skip_existing=False)
 
         self.assertEqual(
-            [request.method for request, _ in self.requests], ["GET", "PUT", "PUT"]
+            [request.method for request, _ in self.requests], ["HEAD", "PUT", "PUT"]
         )
         self.assertEqual(self.requests[1][0].headers["If-None-Match"], b"*")
         self.assertNotIn("If-None-Match", self.requests[2][0].headers)
@@ -289,7 +272,7 @@ class HTTPRetryTests(unittest.TestCase):
     def test_lost_put_response_recovers_a_locked_object(self):
         self.upload(
             [
-                (200, {}, EMPTY_LIST),
+                MISSING_OBJECT,
                 None,  # The first PUT committed and its response was lost.
                 (409, {}, b"<Error><Code>ObjectLockedByBucketPolicy</Code></Error>"),
                 (503, {}, b""),
@@ -298,7 +281,7 @@ class HTTPRetryTests(unittest.TestCase):
         )
         self.assertEqual(
             [request.method for request, _ in self.requests],
-            ["GET", "PUT", "PUT", "HEAD", "HEAD"],
+            ["HEAD", "PUT", "PUT", "HEAD", "HEAD"],
         )
 
     def test_retries_a_part_and_recovers_a_lost_completion_response(self):
@@ -307,7 +290,7 @@ class HTTPRetryTests(unittest.TestCase):
         with patch.multiple(transfer, **MULTIPART_SETTINGS):
             self.upload(
                 [
-                    (200, {}, EMPTY_LIST),
+                    MISSING_OBJECT,
                     (
                         200,
                         {},
@@ -324,7 +307,7 @@ class HTTPRetryTests(unittest.TestCase):
             )
         self.assertEqual(
             [request.method for request, _ in self.requests],
-            ["GET", "POST", "PUT", "PUT", "PUT", "POST", "POST", "DELETE", "HEAD"],
+            ["HEAD", "POST", "PUT", "PUT", "PUT", "POST", "POST", "DELETE", "HEAD"],
         )
         for request, body in self.requests[2:4]:
             self.assertIn("partNumber=1", request.url)

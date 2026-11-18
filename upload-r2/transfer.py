@@ -132,8 +132,12 @@ def upload_file(
         metadata["ContentType"] = content_type
 
     sessions = 2 if upload.size >= MULTIPART_THRESHOLD else 1
-    print(f"Uploading {str(upload.path)!r} to {destination!r}")
     try:
+        if skip_existing and object_exists(client, target):
+            print(f"Skipping existing {destination!r}")
+            return
+
+        print(f"Uploading {str(upload.path)!r} to {destination!r}")
         for session in range(1, sessions + 1):
             try:
                 manager.upload(
@@ -165,30 +169,11 @@ def upload_file(
 def upload_files(
     client: BaseClient,
     bucket: str,
-    prefix: str,
     uploads: list[Upload],
     *,
     skip_existing: bool,
     cache_control: str,
 ) -> None:
-    if skip_existing:
-        existing = set()
-        pending = {upload.key for upload in uploads}
-        pages = client.get_paginator("list_objects_v2").paginate(
-            Bucket=bucket, Prefix=prefix
-        )
-        for page in pages:
-            existing.update(
-                entry["Key"]
-                for entry in page.get("Contents", [])
-                if entry["Key"] in pending
-            )
-            if existing == pending:
-                break
-        for key in sorted(existing):
-            destination = f"s3://{bucket}/{key}"
-            print(f"Skipping existing {destination!r}")
-        uploads = [upload for upload in uploads if upload.key not in existing]
     if not uploads:
         return
 

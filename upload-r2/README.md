@@ -37,17 +37,17 @@ For live uploads, pass R2 object read and write credentials for the bucket
 using the standard AWS SDK environment variables `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY`. Set `AWS_SESSION_TOKEN` for temporary R2 credentials.
 
-The default mode lists existing objects and uses conditional writes to protect
-against concurrent uploads of the same key. Rerun a versioned upload with the
-same release files. Existing objects are skipped by key, so their contents
-are assumed to match the release.
+The default mode checks each target key with `HeadObject` and uses conditional
+writes to protect against concurrent uploads of the same key. Rerun a versioned
+upload with the same release files. Existing objects are skipped by key, so
+their contents are assumed to match the release.
 
 The action switches from single PUTs to multipart uploads at 100 MB
 (100,000,000 bytes). Multipart uploads can retry individual parts.
 [R2 upload guidance](https://developers.cloudflare.com/r2/objects/upload-objects/#choose-an-upload-method)
 
-Transient errors during listing and upload get up to four attempts per request
-with backoff, including R2 throttling and interrupted request bodies.
+Transient errors during object checks and uploads get up to four attempts per
+request with backoff, including R2 throttling and interrupted request bodies.
 If a multipart upload needs a fresh upload ID, the action can restart it once.
 In `skip` mode it checks for an existing object before restarting, which also
 handles a successful completion whose response was lost.

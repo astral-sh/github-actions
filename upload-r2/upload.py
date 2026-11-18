@@ -88,7 +88,6 @@ def main() -> None:
         upload_files(
             client,
             bucket,
-            prefix,
             uploads,
             skip_existing=if_exists == "skip",
             cache_control=os.environ["R2_CACHE_CONTROL"],
