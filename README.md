@@ -15,6 +15,7 @@ Shared GitHub Actions for Astral projects.
 - [Create release pull request](create-release-pr/): commit prepared release files
   and create or update a pull request.
 - [Release smoke test](release-smoke-test/): test release artifacts in disposable containers.
+- [Upload to R2](upload-r2/): publish local files to Cloudflare R2.
 - [PR security review](security-pr-review/): review pull requests with Codex Security.
 - [PR review findings](pull-request-review/): format and publish structured review findings.
 - [Plan release signing](plan-release-signing/README.md): derive native
