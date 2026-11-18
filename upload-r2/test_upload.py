@@ -374,6 +374,51 @@ class HTTPRetryTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
+    def test_dry_run_rejects_sources_inside_the_action_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            action = root / "action"
+            nested = action / "nested"
+            nested.mkdir(parents=True)
+            alias = root / "alias"
+            alias.symlink_to(action, target_is_directory=True)
+            env = {
+                "GITHUB_ACTION_PATH": str(action),
+                "R2_ACCOUNT_ID": "a" * 32,
+                "R2_BUCKET": BUCKET,
+                "R2_PREFIX": "",
+                "R2_INCLUDE": "**/*",
+                "R2_IF_EXISTS": "skip",
+                "R2_DRY_RUN": "true",
+            }
+            for source in (action, nested, alias):
+                with (
+                    self.subTest(source=source),
+                    patch.dict(os.environ, {**env, "R2_SOURCE_DIRECTORY": str(source)}),
+                    self.assertRaisesRegex(
+                        ValueError, "source-directory must be outside"
+                    ),
+                ):
+                    main()
+
+    def test_rejects_action_files_selected_from_a_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            action = root / "action"
+            action.mkdir()
+            (action / "upload.py").touch()
+            (root / "release.zip").touch()
+
+            with self.assertRaisesRegex(
+                ValueError, "Selected file is inside GITHUB_ACTION_PATH"
+            ):
+                plan_uploads(root, "**/*", PREFIX, action_path=action)
+
+            uploads = plan_uploads(root, "*.zip", PREFIX, action_path=action)
+            self.assertEqual(
+                [upload.key for upload in uploads], [PREFIX + "release.zip"]
+            )
+
     def test_dry_run_preserves_existing_prefix_slashes(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory).resolve() / "release.zip"

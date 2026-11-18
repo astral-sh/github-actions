@@ -17,10 +17,16 @@ class Upload:
     size: int
 
 
-def plan_uploads(directory: Path, include: str, prefix: str) -> list[Upload]:
+def plan_uploads(
+    directory: Path, include: str, prefix: str, *, action_path: Path | None = None
+) -> list[Upload]:
     if not directory.is_dir():
         raise ValueError(f"Source directory does not exist: {str(directory)!r}")
     root = directory.resolve()
+    action_root = action_path.resolve() if action_path is not None else None
+    if action_root is not None and root.is_relative_to(action_root):
+        raise ValueError("source-directory must be outside GITHUB_ACTION_PATH")
+
     selected = set()
     for line in include.splitlines():
         pattern = line.strip()
@@ -43,6 +49,10 @@ def plan_uploads(directory: Path, include: str, prefix: str) -> list[Upload]:
     uploads = []
     for path in sorted(selected):
         relative = path.relative_to(root).as_posix()
+        if action_root is not None and path.is_relative_to(action_root):
+            raise ValueError(
+                f"Selected file is inside GITHUB_ACTION_PATH: {relative!r}"
+            )
         if path.resolve() != path:
             raise ValueError(f"Upload path goes through a symbolic link: {relative!r}")
         key = prefix + relative
@@ -75,7 +85,13 @@ def main() -> None:
     if dry_run not in {"true", "false"}:
         raise ValueError("dry-run must be true or false")
 
-    uploads = plan_uploads(Path(source), os.environ["R2_INCLUDE"], prefix)
+    action_path = os.environ.get("GITHUB_ACTION_PATH")
+    uploads = plan_uploads(
+        Path(source),
+        os.environ["R2_INCLUDE"],
+        prefix,
+        action_path=Path(action_path) if action_path else None,
+    )
     if dry_run == "true":
         for upload in uploads:
             destination = f"s3://{bucket}/{upload.key}"

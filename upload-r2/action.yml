@@ -3,7 +3,7 @@ description: Upload selected local files to Cloudflare R2.
 
 inputs:
   source-directory:
-    description: Local directory containing the files to upload.
+    description: Local directory containing the files to upload, outside this action's directory.
     required: true
   include:
     description: Newline-separated relative paths or glob patterns. Defaults to all files.
@@ -52,5 +52,4 @@ runs:
         R2_CACHE_CONTROL: ${{ inputs.cache-control }}
         R2_CONTENT_TYPE: ${{ inputs.content-type }}
         R2_DRY_RUN: ${{ inputs.dry-run }}
-      # Keep the environment and installed package outside the upload source.
-      run: uv run --isolated --no-editable --locked --project "$GITHUB_ACTION_PATH" upload-r2
+      run: uv run --locked --project "$GITHUB_ACTION_PATH" upload-r2

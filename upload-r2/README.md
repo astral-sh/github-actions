@@ -24,7 +24,7 @@ combines the optional prefix and the file's relative path.
 
 | Input | Description |
 | --- | --- |
-| `source-directory` | Required. Local directory, relative to the action step's working directory or absolute. |
+| `source-directory` | Required. Local directory, relative to the action step's working directory or absolute. The source directory and selected files must be outside `GITHUB_ACTION_PATH`. |
 | `include` | Newline-separated relative paths or glob patterns. Defaults to `**/*`. Each literal path must exist. A glob may match zero files, but the selection as a whole must contain at least one file. Matched files must be reachable without following symlinks inside the source directory. |
 | `account-id` | Required. Cloudflare account ID. |
 | `bucket` | Required. R2 bucket name. |
@@ -32,7 +32,7 @@ combines the optional prefix and the file's relative path.
 | `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects at the selected keys. |
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
 | `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. The default uses the release mirror's extension map, with `application/x-ndjson` for `.ndjson` and `application/octet-stream` for unknown extensions. |
-| `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the same locked dependencies in an isolated uv environment. |
+| `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the action's locked uv environment. |
 
 For live uploads, pass R2 object read and write credentials for the bucket
 using the standard AWS SDK environment variables `AWS_ACCESS_KEY_ID` and
@@ -60,4 +60,4 @@ the caller. If a checksum manifest must be published last, upload it in a
 subsequent step after the archives succeed.
 
 Run the tests locally with
-`uv run --isolated --no-editable --locked --project upload-r2 python -m unittest discover -s upload-r2 -v`.
+`uv run --locked --project upload-r2 python -B -m unittest discover -s upload-r2 -v`.
