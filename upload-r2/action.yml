@@ -48,4 +48,4 @@ runs:
         R2_IF_EXISTS: ${{ inputs.if-exists }}
         R2_CACHE_CONTROL: ${{ inputs.cache-control }}
         R2_DRY_RUN: ${{ inputs.dry-run }}
-      run: uv run --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"
+      run: uv run --isolated --locked --project "$GITHUB_ACTION_PATH" python -B "$GITHUB_ACTION_PATH/upload.py"

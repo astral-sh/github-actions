@@ -22,18 +22,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Create a release asset
-        run: |
-          mkdir -p "$RUNNER_TEMP/upload-r2-fixture"
-          touch "$RUNNER_TEMP/upload-r2-fixture/release.zip"
-      - name: Test dry-run entrypoint
-        uses: $/upload-r2
+      - name: Test dry run with the action inside the upload source
+        uses: ./upload-r2
         with:
           account-id: "00000000000000000000000000000000"
           bucket: test-bucket
           prefix: github/project/releases/download/v1
-          source-directory: ${{ runner.temp }}/upload-r2-fixture
-          include: "*.zip"
+          source-directory: upload-r2
           dry-run: "true"
       - name: Test upload planning and retries
         run: uv run --locked --project upload-r2 python -B -m unittest discover -s upload-r2 -v
