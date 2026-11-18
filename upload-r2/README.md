@@ -36,6 +36,8 @@ combines the optional prefix and the file's relative path.
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
 | `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. The default uses the release mirror's extension map, with `application/x-ndjson` for `.ndjson` and `application/octet-stream` for unknown extensions. |
 | `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the action's locked uv environment. |
+| `uv-version` | uv version installed by `setup-uv`. Defaults to the version pinned in [action.yml](action.yml). |
+| `enable-cache` | Defaults to `"false"`. Set to `"true"` to cache uv dependencies across GitHub Actions runs. The cache key uses this action's `uv.lock`. |
 
 For live uploads, pass R2 object read and write credentials for the bucket
 using the standard AWS SDK environment variables `AWS_ACCESS_KEY_ID` and

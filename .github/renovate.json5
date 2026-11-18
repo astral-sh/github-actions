@@ -18,6 +18,14 @@
   customManagers: [
     {
       customType: "regex",
+      managerFilePatterns: ["/^upload-r2\\/action\\.yml$/"],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: "(?<currentValue>[^"\\r\\n]+)"',
+      ],
+      versioningTemplate: "semver",
+    },
+    {
+      customType: "regex",
       managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
       matchStrings: ['codex-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
       depNameTemplate: "@openai/codex",
