@@ -32,7 +32,7 @@ combines the optional prefix and the file's relative path.
 | `account-id` | Required. Cloudflare account ID. |
 | `bucket` | Required. R2 bucket name. |
 | `prefix` | Optional. Key prefix. The action adds a trailing slash when needed. |
-| `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects at the selected keys. |
+| `if-exists` | `skip` (default) preserves existing objects and uploads missing keys. `overwrite` replaces objects conditionally. |
 | `cache-control` | Optional. Sets the `Cache-Control` metadata on uploaded objects. |
 | `content-type` | Optional. Sets the same `Content-Type` on every uploaded object. The default uses the release mirror's extension map, with `application/x-ndjson` for `.ndjson` and `application/octet-stream` for unknown extensions. |
 | `dry-run` | Set to `"true"` to validate and print the local upload plan without R2 credentials. Both modes use the action's locked uv environment. |
@@ -47,6 +47,13 @@ The default mode checks each target key with `HeadObject` and uses conditional
 writes to protect against concurrent uploads of the same key. Rerun a versioned
 upload with the same release files. Existing objects are skipped by key, so
 their contents are assumed to match the release.
+
+In `overwrite` mode, R2 replaces an object only if its ETag at commit matches
+the ETag read before uploading. If the action found no object, R2 creates it
+only if the key is still absent at commit. The action reports conflicts by key
+and keeps the original condition across retries. If the response to a write
+is lost, the action checks a write ID in the object's metadata to confirm
+whether its upload succeeded.
 
 The action switches from single PUTs to multipart uploads at 100 MB
 (100,000,000 bytes). Multipart uploads can retry individual parts.

@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from functools import partial
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 import botocore.session
 from botocore.config import Config
@@ -32,6 +33,7 @@ PART_SIZE = 32 * MIB
 UPLOAD_CONCURRENCY = 4
 REQUEST_ATTEMPTS = 4
 MULTIPART_RESTART_ERRORS = {"InvalidPart", "NoSuchUpload"}
+WRITE_ID_METADATA_KEY = "upload-r2-write-id"
 
 # Use the backfill tool's media types plus NDJSON for release metadata.
 EXTENSION_CONTENT_TYPES = (
@@ -118,18 +120,23 @@ def is_transient_error(error: Exception) -> bool:
     return isinstance(error, (ConnectionError, HTTPClientError))
 
 
-def object_exists(client: BaseClient, target: dict[str, str]) -> bool:
+def head_object(client: BaseClient, target: dict[str, str]) -> dict | None:
     try:
-        client.head_object(**target)
+        return client.head_object(**target)
     except ClientError as error:
         if error.response["ResponseMetadata"]["HTTPStatusCode"] == 404:
-            return False
+            return None
         raise
-    return True
 
 
-def require_missing_object(*, params: dict, **kwargs) -> None:
-    params["IfNoneMatch"] = "*"
+def add_write_condition(
+    expected_etags: dict[str, str | None], *, params: dict, **kwargs
+) -> None:
+    etag = expected_etags[params["Key"]]
+    if etag is None:
+        params["IfNoneMatch"] = "*"
+    else:
+        params["IfMatch"] = etag
 
 
 def upload_file(
@@ -138,13 +145,14 @@ def upload_file(
     bucket: str,
     upload: Upload,
     *,
+    expected_etags: dict[str, str | None],
     skip_existing: bool,
     cache_control: str,
     content_type: str,
 ) -> None:
     destination = f"s3://{bucket}/{upload.key}"
     target = {"Bucket": bucket, "Key": upload.key}
-    metadata = {
+    metadata: dict[str, str | dict[str, str]] = {
         "ContentType": content_type or content_type_for_filename(upload.path.name),
     }
     if cache_control:
@@ -152,9 +160,19 @@ def upload_file(
 
     sessions = 2 if upload.size >= MULTIPART_THRESHOLD else 1
     try:
-        if skip_existing and object_exists(client, target):
+        existing = head_object(client, target)
+        if skip_existing and existing is not None:
             print(f"Skipping existing {destination!r}")
             return
+
+        etag = existing.get("ETag") if existing is not None else None
+        if existing is not None and not etag:
+            raise RuntimeError(f"HeadObject returned no ETag for {destination!r}")
+        # Keep the same condition through request retries and multipart restarts.
+        expected_etags[upload.key] = etag
+        write_id = None if skip_existing else uuid4().hex
+        if write_id is not None:
+            metadata["Metadata"] = {WRITE_ID_METADATA_KEY: write_id}
 
         print(f"Uploading {str(upload.path)!r} to {destination!r}")
         for session in range(1, sessions + 1):
@@ -169,18 +187,36 @@ def upload_file(
                     if isinstance(error, ClientError)
                     else None
                 )
-                can_restart = (
-                    code in MULTIPART_RESTART_ERRORS or is_transient_error(error)
+                can_restart = code in MULTIPART_RESTART_ERRORS or is_transient_error(
+                    error
                 )
                 # A bucket lock can take precedence over the precondition. Check
                 # for a committed object after a lock or an ambiguous failure.
                 check_destination = can_restart or code == "ObjectLockedByBucketPolicy"
                 if skip_existing and (
                     code == "PreconditionFailed"
-                    or (check_destination and object_exists(client, target))
+                    or (check_destination and head_object(client, target) is not None)
                 ):
                     print(f"Skipping existing {destination!r}")
                     return
+                if write_id is not None and (
+                    check_destination or code == "PreconditionFailed"
+                ):
+                    current = head_object(client, target)
+                    if current is not None and (
+                        current.get("Metadata", {}).get(WRITE_ID_METADATA_KEY)
+                        == write_id
+                    ):
+                        print(f"Confirmed upload to {destination!r}")
+                        return
+                    current_etag = (
+                        current.get("ETag", "") if current is not None else None
+                    )
+                    if code == "PreconditionFailed" or current_etag != etag:
+                        raise RuntimeError(
+                            f"Upload conflict for {destination!r}: "
+                            "the destination changed during the upload"
+                        ) from error
                 if session == sessions or not can_restart:
                     raise
                 print(f"Restarting multipart upload for {destination!r}: {error}")
@@ -206,16 +242,15 @@ def upload_files(
         multipart_chunksize=PART_SIZE,
         max_request_concurrency=UPLOAD_CONCURRENCY,
     )
+    expected_etags: dict[str, str | None] = {}
+    apply_condition = partial(add_write_condition, expected_etags)
     with ExitStack() as stack:
-        if skip_existing:
-            # s3transfer does not expose IfNoneMatch as an upload argument.
-            # Add it to the requests that commit objects for this batch.
-            for operation in ("PutObject", "CompleteMultipartUpload"):
-                event = f"before-parameter-build.s3.{operation}"
-                client.meta.events.register(event, require_missing_object)
-                stack.callback(
-                    client.meta.events.unregister, event, require_missing_object
-                )
+        # s3transfer does not expose conditional headers as upload arguments.
+        # Look up each key's condition on the requests that commit the object.
+        for operation in ("PutObject", "CompleteMultipartUpload"):
+            event = f"before-parameter-build.s3.{operation}"
+            client.meta.events.register(event, apply_condition)
+            stack.callback(client.meta.events.unregister, event, apply_condition)
 
         manager = stack.enter_context(TransferManager(client, config))
         executor = stack.enter_context(
@@ -226,6 +261,7 @@ def upload_files(
             client,
             manager,
             bucket,
+            expected_etags=expected_etags,
             skip_existing=skip_existing,
             cache_control=cache_control,
             content_type=content_type,

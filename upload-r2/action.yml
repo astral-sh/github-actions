@@ -18,7 +18,7 @@ inputs:
     description: Object key prefix within the bucket.
     default: ""
   if-exists:
-    description: Skip existing objects or overwrite them.
+    description: Skip existing objects or overwrite them conditionally.
     default: skip
   cache-control:
     description: Cache-Control header to set on uploaded objects.

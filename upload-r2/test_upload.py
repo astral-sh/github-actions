@@ -5,6 +5,7 @@ from contextlib import closing
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
+from uuid import UUID
 
 from botocore.awsrequest import AWSResponse
 from botocore.exceptions import ConnectionClosedError
@@ -20,6 +21,8 @@ CACHE_CONTROL = "public, max-age=31536000, immutable"
 METADATA = {"CacheControl": CACHE_CONTROL, "ContentType": "application/zip"}
 MISSING_OBJECT = (404, {}, b"")
 DISCONNECT = b"<Error><Code>ClientDisconnect</Code></Error>"
+PRECONDITION_FAILED = (412, {}, b"<Error><Code>PreconditionFailed</Code></Error>")
+WRITE_ID_HEADER = f"x-amz-meta-{transfer.WRITE_ID_METADATA_KEY}"
 MULTIPART_PART_SIZE = 5 * transfer.MIB
 MULTIPART_CONTENT = b"a" * MULTIPART_PART_SIZE + b"ef"
 MULTIPART_SETTINGS = {
@@ -150,8 +153,14 @@ class TransferTests(unittest.TestCase):
         small = self.asset("small.tar.gz")
         large = self.asset("z-large.tar.gz", MULTIPART_CONTENT)
         content_type = "application/x-ndjson"
-        metadata = {"CacheControl": CACHE_CONTROL, "ContentType": content_type}
+        metadata = {
+            "CacheControl": CACHE_CONTROL,
+            "ContentType": content_type,
+            "Metadata": ANY,
+        }
+        self.expect_missing_object(small)
         self.s3.add_response("put_object", {}, {**small, **metadata, "Body": ANY})
+        self.expect_missing_object(large)
         self.multipart_attempt(large, "upload", metadata=metadata)
 
         with (
@@ -314,16 +323,91 @@ class HTTPRetryTests(unittest.TestCase):
             ["HEAD"] * transfer.REQUEST_ATTEMPTS,
         )
 
-    def test_overwrite_writes_unconditionally_without_lookup(self):
+    def test_overwrite_requires_missing_key_or_original_etag(self):
+        existing = (200, {"etag": '"original"'}, b"")
         uploaded = (200, {"etag": '"release"'}, b"")
-        self.upload([MISSING_OBJECT, uploaded])
-        self.upload([uploaded], skip_existing=False)
+        self.upload([MISSING_OBJECT, uploaded], skip_existing=False)
+        self.upload([existing, uploaded], skip_existing=False)
 
         self.assertEqual(
-            [request.method for request, _ in self.requests], ["HEAD", "PUT", "PUT"]
+            [request.method for request, _ in self.requests],
+            ["HEAD", "PUT", "HEAD", "PUT"],
         )
         self.assertEqual(self.requests[1][0].headers["If-None-Match"], b"*")
-        self.assertNotIn("If-None-Match", self.requests[2][0].headers)
+        self.assertNotIn("If-Match", self.requests[1][0].headers)
+        self.assertEqual(self.requests[3][0].headers["If-Match"], b'"original"')
+        self.assertNotIn("If-None-Match", self.requests[3][0].headers)
+
+    def test_overwrite_reports_a_conflict_without_retrying_against_the_new_etag(self):
+        with self.assertRaisesRegex(RuntimeError, r"Upload conflict.*release\.zip"):
+            self.upload(
+                [
+                    (200, {"etag": '"original"'}, b""),
+                    PRECONDITION_FAILED,
+                    (200, {"etag": '"competing"'}, b""),
+                ],
+                skip_existing=False,
+            )
+        self.assertEqual(
+            [request.method for request, _ in self.requests], ["HEAD", "PUT", "HEAD"]
+        )
+        self.assertEqual(self.requests[1][0].headers["If-Match"], b'"original"')
+
+    def test_overwrite_recovers_its_own_lost_put_response(self):
+        write_id = UUID(int=1)
+        with patch.object(transfer, "uuid4", return_value=write_id):
+            self.upload(
+                [
+                    (200, {"etag": '"original"'}, b""),
+                    None,
+                    PRECONDITION_FAILED,
+                    (200, {"etag": '"release"', WRITE_ID_HEADER: write_id.hex}, b""),
+                ],
+                skip_existing=False,
+            )
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "PUT", "PUT", "HEAD"],
+        )
+        for request, _ in self.requests[1:3]:
+            self.assertEqual(request.headers["If-Match"], b'"original"')
+            self.assertEqual(request.headers[WRITE_ID_HEADER], write_id.hex.encode())
+
+    def test_multipart_overwrite_keeps_the_original_condition_when_restarted(self):
+        (self.directory / "release.zip").write_bytes(MULTIPART_CONTENT)
+        original = (200, {"etag": '"original"'}, b"")
+        responses = [original]
+        for upload_id, completion in (
+            ("failed", (400, {}, b"<Error><Code>InvalidPart</Code></Error>")),
+            ("replacement", (200, {}, b"<CompleteMultipartUploadResult/>")),
+        ):
+            initiation = (
+                f"<InitiateMultipartUploadResult><UploadId>{upload_id}</UploadId>"
+                "</InitiateMultipartUploadResult>"
+            )
+            responses.extend(
+                [
+                    (200, {}, initiation.encode()),
+                    (200, {"etag": '"part-1"'}, b""),
+                    (200, {"etag": '"part-2"'}, b""),
+                    completion,
+                ]
+            )
+            if upload_id == "failed":
+                responses.extend([(204, {}, b""), original])
+        with (
+            patch.multiple(transfer, **MULTIPART_SETTINGS),
+            patch.object(transfer.time, "sleep"),
+        ):
+            self.upload(responses, skip_existing=False)
+        for index, upload_id in ((4, "failed"), (10, "replacement")):
+            request = self.requests[index][0]
+            self.assertTrue(request.url.endswith(f"?uploadId={upload_id}"))
+            self.assertEqual(request.headers["If-Match"], b'"original"')
+        self.assertEqual(
+            self.requests[1][0].headers[WRITE_ID_HEADER],
+            self.requests[7][0].headers[WRITE_ID_HEADER],
+        )
 
     def test_lost_put_response_recovers_a_locked_object(self):
         self.upload(
