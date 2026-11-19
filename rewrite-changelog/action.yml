@@ -33,6 +33,11 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
       run: |
+        if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+          echo "::error::rewrite-changelog must run in a job without id-token: write. Move the token exchange and push to a separate job."
+          exit 1
+        fi
+
         if [[ -n "$PROJECT_PROMPT_FILE" && ! -f "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE" ]]; then
           echo "::error::The project changelog prompt file does not exist."
           exit 1

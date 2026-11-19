@@ -8,7 +8,12 @@ using the caller's Git identity.
 
 Use an Ubuntu runner with Bash, Git, and uv. Check out the caller repository with
 full history at the workspace root, including any submodules that the prompt
-needs to inspect.
+needs to inspect. Set `persist-credentials: false` on the checkout.
+
+Run the rewrite in a job with read-only GitHub permissions. The action fails
+before launching Codex if the runner exposes an OIDC request credential. Pass
+the prepared commits to a separate job with `id-token: write` for the token
+exchange and push.
 
 ```yaml
 - uses: astral-sh/github-actions/rewrite-changelog@<commit-sha>
