@@ -21,9 +21,10 @@ Keep the editorial prompt in the caller repository and pass its path relative
 to the workspace root. Ask Codex for the complete replacement release section,
 starting with the original level-two heading and release date.
 
-The optional `model` and `effort` inputs default to `gpt-6.2-sol` and `high`.
-Choose an effort supported by the model. Each release of this action pins the
-Codex CLI and the upstream Codex Action together.
+The optional `model`, `effort`, and `codex-version` inputs default to
+`gpt-6.2-sol`, `high`, and `0.170.0`. Choose an effort supported by the model
+and a CLI version compatible with the pinned Codex Action. The `codex-version`
+input selects the version of both the CLI and the Responses API proxy.
 
 The action uses read-only Codex permissions and uploads the session as a workflow
 artifact. Keep the API key scoped to the trusted release preparation job.

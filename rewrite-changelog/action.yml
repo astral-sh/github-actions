@@ -16,6 +16,11 @@ inputs:
     description: Reasoning effort supported by the selected model.
     required: false
     default: high
+  codex-version:
+    description: Version of the Codex CLI and Responses API proxy to install.
+    required: false
+    # renovate: datasource=npm depName=@openai/codex
+    default: "0.170.0"
 
 runs:
   using: composite
@@ -43,7 +48,7 @@ runs:
       uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
       with:
         openai-api-key: ${{ inputs.openai-api-key }}
-        codex-version: "0.170.0"
+        codex-version: ${{ inputs.codex-version }}
         model: ${{ inputs.model }}
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
