@@ -11,8 +11,8 @@ inputs:
   metadata-file:
     description: "Path to prepared release metadata in NDJSON format."
     required: true
-  token:
-    description: "GitHub token with contents and pull requests write access to astral-sh/versions."
+  sts-api-url:
+    description: "HTTPS base URL and OIDC audience of the release token service."
     required: true
   merge-mode:
     description: "Whether to leave the pull request for review or immediately admin-squash it."
@@ -40,6 +40,18 @@ runs:
         MERGE_MODE: ${{ inputs.merge-mode }}
       run: bash "$GITHUB_ACTION_PATH/prepare.sh"
 
+    - name: "Get versions token"
+      id: token
+      if: steps.prepare.outputs.changed == 'true'
+      uses: $/simple-token-service
+      with:
+        exchange-url: ${{ inputs.sts-api-url }}/exchange
+        audience: ${{ inputs.sts-api-url }}
+        repository: astral-sh/versions
+        permissions: |
+          contents: write
+          pull_requests: write
+
     - name: "Publish versions pull request"
       id: publish
       if: steps.prepare.outputs.changed == 'true'
@@ -52,7 +64,7 @@ runs:
         BRANCH: ${{ steps.prepare.outputs.branch }}
         EXPECTED_HEAD: ${{ steps.prepare.outputs.expected-head }}
         GH_HOST: github.com
-        GH_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ steps.token.outputs.token }}
         GH_PROMPT_DISABLED: '1'
         GIT_TERMINAL_PROMPT: '0'
       run: bash "$GITHUB_ACTION_PATH/publish.sh"
