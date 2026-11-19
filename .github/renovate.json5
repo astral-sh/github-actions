@@ -26,7 +26,7 @@
     },
     {
       customType: "regex",
-      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/", "/^rewrite-changelog\\/action\\.yml$/"],
       matchStrings: ['codex-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
       depNameTemplate: "@openai/codex",
       datasourceTemplate: "npm",
