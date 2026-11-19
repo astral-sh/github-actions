@@ -1,0 +1,16 @@
+[project]
+name = "upload-r2"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = ["awscrt>=0.26,<1", "botocore>=1.40,<2", "s3transfer>=0.19.3,<0.20"]
+
+[project.scripts]
+upload-r2 = "upload_r2.upload:cli"
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+no-build = true
+exclude-newer = "P7D"

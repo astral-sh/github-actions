@@ -1,0 +1,643 @@
+import os
+import tempfile
+import unittest
+from contextlib import closing
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
+from uuid import UUID
+
+from botocore.awsrequest import AWSResponse
+from botocore.exceptions import ConnectionClosedError
+from botocore.stub import ANY, Stubber
+from urllib3.response import HTTPResponse
+
+from upload_r2 import transfer
+from upload_r2.upload import main, plan_uploads
+
+BUCKET = "mirror"
+PREFIX = "github/project/releases/download/v1/"
+CACHE_CONTROL = "public, max-age=31536000, immutable"
+METADATA = {"CacheControl": CACHE_CONTROL, "ContentType": "application/zip"}
+RELEASE_HEAD = {"ContentLength": 13, "ChecksumCRC64NVME": "jF2KaqItVgI="}
+MISSING_OBJECT = (404, {}, b"")
+DISCONNECT = b"<Error><Code>ClientDisconnect</Code></Error>"
+PRECONDITION_FAILED = (412, {}, b"<Error><Code>PreconditionFailed</Code></Error>")
+WRITE_ID_HEADER = f"x-amz-meta-{transfer.WRITE_ID_METADATA_KEY}"
+MULTIPART_PART_SIZE = 5 * transfer.MIB
+MULTIPART_CONTENT = b"a" * MULTIPART_PART_SIZE + b"ef"
+MULTIPART_HEAD = {
+    "ContentLength": len(MULTIPART_CONTENT),
+    "ChecksumCRC64NVME": "MQ+Gtmmci1c=",
+}
+MULTIPART_SETTINGS = {
+    "MULTIPART_THRESHOLD": len(MULTIPART_CONTENT),
+    "PART_SIZE": MULTIPART_PART_SIZE,
+    "UPLOAD_CONCURRENCY": 1,
+}
+
+
+class TransferTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        with patch.dict(
+            os.environ,
+            {"AWS_ACCESS_KEY_ID": "test-key", "AWS_SECRET_ACCESS_KEY": "test-secret"},
+        ):
+            self.client = transfer.make_client("a" * 32)
+        self.addCleanup(self.client.close)
+        self.s3 = self.enterContext(Stubber(self.client))
+        self.addCleanup(self.s3.assert_no_pending_responses)
+        self.enterContext(patch.multiple(transfer, **MULTIPART_SETTINGS))
+        self.enterContext(patch.object(transfer.time, "sleep"))
+
+    def asset(self, name, content=b"release asset"):
+        (self.directory / name).write_bytes(content)
+        return {"Bucket": BUCKET, "Key": PREFIX + name}
+
+    def upload(self, *, include="*.zip"):
+        transfer.upload_files(
+            self.client,
+            BUCKET,
+            plan_uploads(self.directory, include, PREFIX),
+            skip_existing=True,
+            cache_control=CACHE_CONTROL,
+        )
+
+    def expect_missing_object(self, target, *, read_checksum=True):
+        options = {"ChecksumMode": "ENABLED"} if read_checksum else {}
+        self.s3.add_client_error(
+            "head_object", http_status_code=404, expected_params={**target, **options}
+        )
+
+    def expect_existing_object(self, target, response):
+        self.s3.add_response(
+            "head_object", response, {**target, "ChecksumMode": "ENABLED"}
+        )
+
+    def multipart_attempt(
+        self, target, upload_id, completion_error=None, *, metadata=METADATA
+    ):
+        self.s3.add_response(
+            "create_multipart_upload", {"UploadId": upload_id}, {**target, **metadata}
+        )
+        request = {**target, "UploadId": upload_id}
+        parts = []
+        for number in (1, 2):
+            etag = f'"part-{number}"'
+            self.s3.add_response(
+                "upload_part",
+                {"ETag": etag},
+                {**request, "PartNumber": number, "Body": ANY},
+            )
+            parts.append({"PartNumber": number, "ETag": etag})
+        completion = {
+            **request,
+            "MultipartUpload": {"Parts": parts},
+        }
+        if completion_error is None:
+            self.s3.add_response("complete_multipart_upload", {}, completion)
+        else:
+            code, status = completion_error
+            self.s3.add_client_error(
+                "complete_multipart_upload",
+                service_error_code=code,
+                http_status_code=status,
+                expected_params=completion,
+            )
+        return request
+
+    def test_partial_rerun_only_uploads_missing_keys(self):
+        first = self.asset("a.zip")
+        last = self.asset("b.zip")
+        put_first = {**first, **METADATA, "Body": ANY}
+        put_last = {**last, **METADATA, "Body": ANY}
+        self.expect_missing_object(first)
+        self.s3.add_response("put_object", {}, put_first)
+        self.expect_missing_object(last)
+        self.s3.add_client_error(
+            "put_object",
+            service_error_code="AccessDenied",
+            http_status_code=403,
+            expected_params=put_last,
+        )
+        with self.assertRaisesRegex(RuntimeError, r"b\.zip.*AccessDenied"):
+            self.upload()
+
+        self.expect_existing_object(first, RELEASE_HEAD)
+        self.expect_missing_object(last)
+        self.s3.add_response("put_object", {}, put_last)
+        self.upload()
+
+        self.expect_existing_object(first, RELEASE_HEAD)
+        self.expect_existing_object(last, RELEASE_HEAD)
+        self.upload()
+
+    def test_crc64nvme_takes_precedence_over_crc32(self):
+        target = self.asset("a.zip", b"123456789")
+        self.expect_existing_object(
+            target,
+            {
+                "ContentLength": 9,
+                "ChecksumCRC64NVME": "rosUhgp5mIg=",
+                "ChecksumCRC32": "AAAAAA==",
+            },
+        )
+        self.upload()
+
+    def test_skips_matching_full_object_crc32(self):
+        target = self.asset("a.zip", b"123456789")
+        self.expect_existing_object(
+            target, {"ContentLength": 9, "ChecksumCRC32": "y/Q5Jg=="}
+        )
+        self.upload()
+
+    def test_composite_crc32_uses_the_stored_part_layout(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        etag = '"stored-2"'
+        self.expect_existing_object(
+            target,
+            {
+                "ETag": etag,
+                "ContentLength": len(MULTIPART_CONTENT),
+                "ChecksumCRC32": "k0TTjQ==-2",
+            },
+        )
+        self.s3.add_response(
+            "head_object",
+            {"ContentLength": MULTIPART_PART_SIZE, "PartsCount": 2},
+            {**target, "PartNumber": 1, "IfMatch": etag},
+        )
+        with patch.object(transfer, "PART_SIZE", 2 * MULTIPART_PART_SIZE):
+            self.upload()
+
+    def test_different_size_fails_even_when_no_checksum_is_available(self):
+        target = self.asset("a.zip")
+        self.expect_existing_object(target, {"ContentLength": 1})
+        with self.assertRaisesRegex(RuntimeError, r"Size mismatch.*a\.zip"):
+            self.upload()
+
+    def test_skips_same_size_when_no_supported_checksum_is_available(self):
+        target = self.asset("a.zip")
+        self.expect_existing_object(target, {"ContentLength": 13})
+        self.upload()
+
+    def test_content_types_follow_filename_extensions(self):
+        for filename, content_type in (
+            ("archive.tar.gz", "application/gzip"),
+            ("archive.tar.zst", "application/zstd"),
+            ("archive.tar.bz2", "application/x-bzip2"),
+            ("archive.tar.gz.sha256", "text/plain"),
+            ("sha256.sum", "text/plain"),
+            ("installer.sh", "application/x-shellscript"),
+            ("installer.ps1", "application/x-powershell"),
+            ("versions.ndjson", "application/x-ndjson"),
+            ("SHA256SUMS", "application/octet-stream"),
+        ):
+            with self.subTest(filename=filename):
+                target = self.asset(filename)
+                self.expect_missing_object(target)
+                self.s3.add_response(
+                    "put_object",
+                    {},
+                    {
+                        **target,
+                        "CacheControl": CACHE_CONTROL,
+                        "ContentType": content_type,
+                        "Body": ANY,
+                    },
+                )
+                self.upload(include=filename)
+
+    def test_explicit_content_type_overrides_extension_for_both_upload_methods(self):
+        small = self.asset("small.tar.gz")
+        large = self.asset("z-large.tar.gz", MULTIPART_CONTENT)
+        content_type = "application/x-ndjson"
+        metadata = {
+            "CacheControl": CACHE_CONTROL,
+            "ContentType": content_type,
+            "Metadata": ANY,
+        }
+        self.expect_missing_object(small, read_checksum=False)
+        self.s3.add_response("put_object", {}, {**small, **metadata, "Body": ANY})
+        self.expect_missing_object(large, read_checksum=False)
+        self.multipart_attempt(large, "upload", metadata=metadata)
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "R2_ACCOUNT_ID": "a" * 32,
+                    "R2_BUCKET": BUCKET,
+                    "R2_SOURCE_DIRECTORY": str(self.directory),
+                    "R2_INCLUDE": "*.tar.gz",
+                    "R2_PREFIX": PREFIX,
+                    "R2_IF_EXISTS": "overwrite",
+                    "R2_CACHE_CONTROL": CACHE_CONTROL,
+                    "R2_CONTENT_TYPE": content_type,
+                    "R2_DRY_RUN": "false",
+                },
+            ),
+            patch.object(transfer, "make_client", return_value=self.client),
+        ):
+            main()
+
+    def test_invalid_part_restarts_the_entire_upload(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        self.expect_missing_object(target)
+        request = self.multipart_attempt(target, "failed", ("InvalidPart", 400))
+        self.s3.add_response("abort_multipart_upload", {}, request)
+        self.expect_missing_object(target)
+        self.multipart_attempt(target, "replacement")
+
+        self.upload()
+
+    def test_invalid_part_skips_committed_object(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        self.expect_missing_object(target)
+        request = self.multipart_attempt(target, "committed", ("InvalidPart", 400))
+        self.s3.add_response("abort_multipart_upload", {}, request)
+        self.expect_existing_object(target, MULTIPART_HEAD)
+
+        self.upload()
+
+    def test_multipart_retries_are_bounded(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        self.expect_missing_object(target)
+        for upload_id in ("first", "second"):
+            request = self.multipart_attempt(target, upload_id, ("InvalidPart", 400))
+            self.s3.add_response("abort_multipart_upload", {}, request)
+            self.expect_missing_object(target)
+
+        with self.assertRaisesRegex(RuntimeError, "InvalidPart"):
+            self.upload()
+
+    def test_concurrent_multipart_write_hits_bucket_lock(self):
+        target = self.asset("large.zip", MULTIPART_CONTENT)
+        self.expect_missing_object(target)
+        request = self.multipart_attempt(
+            target, "racing", ("ObjectLockedByBucketPolicy", 409)
+        )
+        self.s3.add_response("abort_multipart_upload", {}, request)
+        self.expect_existing_object(target, MULTIPART_HEAD)
+
+        self.upload()
+
+    def test_bucket_lock_without_an_existing_key_is_an_error(self):
+        target = self.asset("a.zip")
+        self.expect_missing_object(target)
+        self.s3.add_client_error(
+            "put_object",
+            service_error_code="ObjectLockedByBucketPolicy",
+            http_status_code=409,
+            expected_params={**target, **METADATA, "Body": ANY},
+        )
+        self.expect_missing_object(target)
+        with self.assertRaisesRegex(RuntimeError, "ObjectLockedByBucketPolicy"):
+            self.upload()
+
+    def test_precondition_failure_skips_a_concurrent_write(self):
+        target = self.asset("a.zip")
+        self.expect_missing_object(target)
+        self.s3.add_client_error(
+            "put_object",
+            service_error_code="PreconditionFailed",
+            http_status_code=412,
+            expected_params={**target, **METADATA, "Body": ANY},
+        )
+        self.expect_existing_object(target, RELEASE_HEAD)
+        self.upload()
+
+    def test_precondition_failure_rejects_different_bytes(self):
+        target = self.asset("a.zip")
+        self.expect_missing_object(target)
+        self.s3.add_client_error(
+            "put_object",
+            service_error_code="PreconditionFailed",
+            http_status_code=412,
+            expected_params={**target, **METADATA, "Body": ANY},
+        )
+        self.expect_existing_object(
+            target, {"ContentLength": 13, "ChecksumCRC32": "AAAAAA=="}
+        )
+        with self.assertRaisesRegex(RuntimeError, r"CRC32 mismatch.*a\.zip"):
+            self.upload()
+
+
+class HTTPRetryTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (self.directory / "release.zip").write_bytes(b"abcdef")
+        self.requests = []
+        self.enterContext(patch("botocore.endpoint.time.sleep"))
+        with patch.dict(
+            os.environ,
+            {"AWS_ACCESS_KEY_ID": "test-key", "AWS_SECRET_ACCESS_KEY": "test-secret"},
+        ):
+            self.client = self.enterContext(closing(transfer.make_client("a" * 32)))
+
+    def upload(self, responses, *, skip_existing=True):
+        responses = iter(responses)
+
+        def respond(request):
+            body = request.body
+            if hasattr(body, "read"):
+                body = body.read()
+            self.requests.append((request, body))
+            result = next(responses)
+            if result is None:
+                raise ConnectionClosedError(endpoint_url=request.url)
+            status, headers, body = result
+            return AWSResponse(
+                request.url,
+                status,
+                headers,
+                HTTPResponse(body=BytesIO(body), preload_content=False),
+            )
+
+        with patch.object(
+            self.client._endpoint.http_session, "send", side_effect=respond
+        ):
+            transfer.upload_files(
+                self.client,
+                BUCKET,
+                plan_uploads(self.directory, "*.zip", PREFIX),
+                skip_existing=skip_existing,
+                cache_control=CACHE_CONTROL,
+            )
+        self.assertEqual(list(responses), [])
+
+    def test_retries_head_and_rewinds_a_single_put(self):
+        self.upload(
+            [
+                (503, {}, b"<Error><Code>ServiceUnavailable</Code></Error>"),
+                (429, {}, b"<Error><Code>TooManyRequests</Code></Error>"),
+                MISSING_OBJECT,
+                (400, {}, b"<Error><Code>IncompleteBody</Code></Error>"),
+                (400, {}, DISCONNECT),
+                (200, {"etag": '"release"'}, b""),
+            ]
+        )
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "HEAD", "HEAD", "PUT", "PUT", "PUT"],
+        )
+        for request, body in self.requests[3:]:
+            self.assertEqual(request.headers["If-None-Match"], b"*")
+            self.assertEqual(body, b"abcdef")
+
+    def test_persistent_throttling_stops_at_request_limit(self):
+        throttled = (429, {}, b"<Error><Code>TooManyRequests</Code></Error>")
+        with self.assertRaisesRegex(RuntimeError, "TooManyRequests"):
+            self.upload([throttled] * transfer.REQUEST_ATTEMPTS)
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD"] * transfer.REQUEST_ATTEMPTS,
+        )
+
+    def test_overwrite_requires_missing_key_or_original_etag(self):
+        existing = (200, {"etag": '"original"'}, b"")
+        uploaded = (200, {"etag": '"release"'}, b"")
+        self.upload([MISSING_OBJECT, uploaded], skip_existing=False)
+        self.upload([existing, uploaded], skip_existing=False)
+
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "PUT", "HEAD", "PUT"],
+        )
+        self.assertEqual(self.requests[1][0].headers["If-None-Match"], b"*")
+        self.assertNotIn("If-Match", self.requests[1][0].headers)
+        self.assertEqual(self.requests[3][0].headers["If-Match"], b'"original"')
+        self.assertNotIn("If-None-Match", self.requests[3][0].headers)
+
+    def test_overwrite_reports_a_conflict_without_retrying_against_the_new_etag(self):
+        with self.assertRaisesRegex(RuntimeError, r"Upload conflict.*release\.zip"):
+            self.upload(
+                [
+                    (200, {"etag": '"original"'}, b""),
+                    PRECONDITION_FAILED,
+                    (200, {"etag": '"competing"'}, b""),
+                ],
+                skip_existing=False,
+            )
+        self.assertEqual(
+            [request.method for request, _ in self.requests], ["HEAD", "PUT", "HEAD"]
+        )
+        self.assertEqual(self.requests[1][0].headers["If-Match"], b'"original"')
+
+    def test_overwrite_recovers_its_own_lost_put_response(self):
+        write_id = UUID(int=1)
+        with patch.object(transfer, "uuid4", return_value=write_id):
+            self.upload(
+                [
+                    (200, {"etag": '"original"'}, b""),
+                    None,
+                    PRECONDITION_FAILED,
+                    (200, {"etag": '"release"', WRITE_ID_HEADER: write_id.hex}, b""),
+                ],
+                skip_existing=False,
+            )
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "PUT", "PUT", "HEAD"],
+        )
+        for request, _ in self.requests[1:3]:
+            self.assertEqual(request.headers["If-Match"], b'"original"')
+            self.assertEqual(request.headers[WRITE_ID_HEADER], write_id.hex.encode())
+
+    def test_multipart_overwrite_keeps_the_original_condition_when_restarted(self):
+        (self.directory / "release.zip").write_bytes(MULTIPART_CONTENT)
+        original = (200, {"etag": '"original"'}, b"")
+        responses = [original]
+        for upload_id, completion in (
+            ("failed", (400, {}, b"<Error><Code>InvalidPart</Code></Error>")),
+            ("replacement", (200, {}, b"<CompleteMultipartUploadResult/>")),
+        ):
+            initiation = (
+                f"<InitiateMultipartUploadResult><UploadId>{upload_id}</UploadId>"
+                "</InitiateMultipartUploadResult>"
+            )
+            responses.extend(
+                [
+                    (200, {}, initiation.encode()),
+                    (200, {"etag": '"part-1"'}, b""),
+                    (200, {"etag": '"part-2"'}, b""),
+                    completion,
+                ]
+            )
+            if upload_id == "failed":
+                responses.extend([(204, {}, b""), original])
+        with (
+            patch.multiple(transfer, **MULTIPART_SETTINGS),
+            patch.object(transfer.time, "sleep"),
+        ):
+            self.upload(responses, skip_existing=False)
+        for index, upload_id in ((4, "failed"), (10, "replacement")):
+            request = self.requests[index][0]
+            self.assertTrue(request.url.endswith(f"?uploadId={upload_id}"))
+            self.assertEqual(request.headers["If-Match"], b'"original"')
+        self.assertEqual(
+            self.requests[1][0].headers[WRITE_ID_HEADER],
+            self.requests[7][0].headers[WRITE_ID_HEADER],
+        )
+
+    def test_lost_put_response_recovers_a_locked_object(self):
+        self.upload(
+            [
+                MISSING_OBJECT,
+                None,  # The first PUT committed and its response was lost.
+                (409, {}, b"<Error><Code>ObjectLockedByBucketPolicy</Code></Error>"),
+                (503, {}, b""),
+                (200, {"content-length": "6", "x-amz-checksum-crc32": "S4457w=="}, b""),
+            ]
+        )
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "PUT", "PUT", "HEAD", "HEAD"],
+        )
+        for request, _ in self.requests:
+            if request.method == "HEAD":
+                self.assertEqual(request.headers["x-amz-checksum-mode"], b"ENABLED")
+
+    def test_retries_a_part_and_recovers_a_lost_completion_response(self):
+        (self.directory / "release.zip").write_bytes(MULTIPART_CONTENT)
+        missing_upload = b"<Error><Code>NoSuchUpload</Code></Error>"
+        with patch.multiple(transfer, **MULTIPART_SETTINGS):
+            self.upload(
+                [
+                    MISSING_OBJECT,
+                    (
+                        200,
+                        {},
+                        b"<InitiateMultipartUploadResult><UploadId>committed</UploadId></InitiateMultipartUploadResult>",
+                    ),
+                    (400, {}, DISCONNECT),
+                    (200, {"etag": '"part-1"'}, b""),
+                    (200, {"etag": '"part-2"'}, b""),
+                    None,  # R2 committed the object and closed the connection.
+                    (404, {}, missing_upload),
+                    (404, {}, missing_upload),
+                    (200, {"content-length": str(len(MULTIPART_CONTENT))}, b""),
+                ]
+            )
+        self.assertEqual(
+            [request.method for request, _ in self.requests],
+            ["HEAD", "POST", "PUT", "PUT", "PUT", "POST", "POST", "DELETE", "HEAD"],
+        )
+        for request, body in self.requests[2:4]:
+            self.assertIn("partNumber=1", request.url)
+            self.assertEqual(body, MULTIPART_CONTENT[:MULTIPART_PART_SIZE])
+        for request, _ in self.requests[5:7]:
+            self.assertTrue(request.url.endswith("?uploadId=committed"))
+            self.assertEqual(request.headers["If-None-Match"], b"*")
+
+
+class PlanTests(unittest.TestCase):
+    def test_dry_run_rejects_sources_inside_the_action_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            action = root / "action"
+            nested = action / "nested"
+            nested.mkdir(parents=True)
+            alias = root / "alias"
+            alias.symlink_to(action, target_is_directory=True)
+            env = {
+                "GITHUB_ACTION_PATH": str(action),
+                "R2_ACCOUNT_ID": "a" * 32,
+                "R2_BUCKET": BUCKET,
+                "R2_PREFIX": "",
+                "R2_INCLUDE": "**/*",
+                "R2_IF_EXISTS": "skip",
+                "R2_DRY_RUN": "true",
+            }
+            for source in (action, nested, alias):
+                with (
+                    self.subTest(source=source),
+                    patch.dict(os.environ, {**env, "R2_SOURCE_DIRECTORY": str(source)}),
+                    self.assertRaisesRegex(
+                        ValueError, "source-directory must be outside"
+                    ),
+                ):
+                    main()
+
+    def test_rejects_action_files_selected_from_a_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            action = root / "action"
+            action.mkdir()
+            (action / "upload.py").touch()
+            (root / "release.zip").touch()
+
+            with self.assertRaisesRegex(
+                ValueError, "Selected file is inside GITHUB_ACTION_PATH"
+            ):
+                plan_uploads(root, "**/*", PREFIX, action_path=action)
+
+            uploads = plan_uploads(root, "*.zip", PREFIX, action_path=action)
+            self.assertEqual(
+                [upload.key for upload in uploads], [PREFIX + "release.zip"]
+            )
+
+    def test_dry_run_preserves_existing_prefix_slashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory).resolve() / "release.zip"
+            path.touch()
+            env = {
+                "R2_ACCOUNT_ID": "a" * 32,
+                "R2_BUCKET": BUCKET,
+                "R2_SOURCE_DIRECTORY": directory,
+                "R2_INCLUDE": path.name,
+                "R2_IF_EXISTS": "skip",
+                "R2_DRY_RUN": "true",
+            }
+            for prefix, expected in (
+                ("", ""),
+                ("release", "release/"),
+                ("/", "/"),
+                ("release//", "release//"),
+            ):
+                with (
+                    self.subTest(prefix=prefix),
+                    patch.dict(os.environ, {**env, "R2_PREFIX": prefix}),
+                    patch("builtins.print") as log,
+                ):
+                    main()
+                    destination = f"s3://{BUCKET}/{expected}{path.name}"
+                    log.assert_called_once_with(
+                        f"Would upload {str(path)!r} to {destination!r}"
+                    )
+
+    def test_selects_unique_files_and_preserves_subdirectories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source / "nested").mkdir()
+            (source / "nested" / "asset.zip").write_bytes(b"asset")
+            (source / "checksum.txt").write_text("checksum")
+            (source / "unused.bin").touch()
+            uploads = plan_uploads(
+                source, "**/*.zip\nnested/asset.zip\nchecksum.txt\n*.tar.gz", PREFIX
+            )
+            self.assertEqual(
+                [(upload.key, upload.size) for upload in uploads],
+                [(PREFIX + "checksum.txt", 8), (PREFIX + "nested/asset.zip", 5)],
+            )
+
+    def test_missing_literal_fails_even_when_glob_matches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            (source / "present.zip").touch()
+            with self.assertRaisesRegex(ValueError, "Required file is missing"):
+                plan_uploads(source, "*.zip\nmissing.zip", PREFIX)
+
+    def test_rejects_symlink_and_parent_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside.zip"
+            outside.touch()
+            source = root / "source"
+            source.mkdir()
+            (source / "link.zip").symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                plan_uploads(source, "*.zip", PREFIX)
+            with self.assertRaisesRegex(ValueError, "inside the source"):
+                plan_uploads(source, "../*.zip", PREFIX)

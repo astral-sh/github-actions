@@ -1,0 +1,63 @@
+name: Upload to R2
+description: Upload selected local files to Cloudflare R2.
+
+inputs:
+  source-directory:
+    description: Local directory containing the files to upload, outside this action's directory.
+    required: true
+  include:
+    description: Newline-separated relative paths or glob patterns. Defaults to all files.
+    default: "**/*"
+  account-id:
+    description: Cloudflare account ID for the R2 S3 endpoint.
+    required: true
+  bucket:
+    description: R2 bucket name.
+    required: true
+  prefix:
+    description: Object key prefix within the bucket.
+    default: ""
+  if-exists:
+    description: Skip existing objects or overwrite them conditionally.
+    default: skip
+  cache-control:
+    description: Cache-Control header to set on uploaded objects.
+    default: ""
+  content-type:
+    description: Content-Type header to set on every uploaded object. Defaults to a filename suffix lookup.
+    default: ""
+  dry-run:
+    description: Validate and print the upload plan.
+    default: "false"
+  uv-version:
+    description: uv version to install.
+    # renovate: datasource=github-release-attachments depName=astral-sh/uv
+    default: "0.13.9"
+  enable-cache:
+    description: Enable GitHub Actions caching for uv dependencies.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        version: ${{ inputs.uv-version }}
+        enable-cache: ${{ inputs.enable-cache }}
+        cache-dependency-glob: ${{ github.action_path }}/uv.lock
+        cache-suffix: upload-r2
+
+    - name: Upload files to R2
+      shell: bash
+      env:
+        R2_SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+        R2_INCLUDE: ${{ inputs.include }}
+        R2_ACCOUNT_ID: ${{ inputs.account-id }}
+        R2_BUCKET: ${{ inputs.bucket }}
+        R2_PREFIX: ${{ inputs.prefix }}
+        R2_IF_EXISTS: ${{ inputs.if-exists }}
+        R2_CACHE_CONTROL: ${{ inputs.cache-control }}
+        R2_CONTENT_TYPE: ${{ inputs.content-type }}
+        R2_DRY_RUN: ${{ inputs.dry-run }}
+      run: uv run --locked --project "$GITHUB_ACTION_PATH" upload-r2
