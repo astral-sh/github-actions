@@ -12,6 +12,8 @@ Shared GitHub Actions for Astral projects.
   superseded artifacts before saving.
 - [Cargo dependency cooldowns](cargo-cooldowns/): enforce a minimum age for
   crates.io dependencies in tracked Cargo lockfiles.
+- [Rewrite release changelog](rewrite-changelog/): editorialize and commit the
+  latest release notes.
 - [Create release pull request](create-release-pr/): commit prepared release files
   and create or update a pull request.
 - [Release smoke test](release-smoke-test/): test release artifacts in disposable containers.

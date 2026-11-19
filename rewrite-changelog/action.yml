@@ -1,0 +1,98 @@
+name: Rewrite release changelog
+description: Editorialize the newest changelog section and commit it on the prepared release branch.
+
+inputs:
+  prompt-file:
+    description: Path to project-specific changelog guidance to append, relative to the workspace root.
+    required: false
+  openai-api-key:
+    description: OpenAI API key for the Codex rewrite.
+    required: true
+  model:
+    description: Codex model to use for the rewrite.
+    required: false
+    default: gpt-6.2-sol
+  effort:
+    description: Reasoning effort supported by the selected model.
+    required: false
+    default: high
+  codex-version:
+    description: Version of the Codex CLI and Responses API proxy to install.
+    required: false
+    # renovate: datasource=npm depName=@openai/codex
+    default: "0.170.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare changelog rewrite
+      id: prepare
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
+      run: |
+        if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+          echo "::error::rewrite-changelog must run in a job without id-token: write. Move the token exchange and push to a separate job."
+          exit 1
+        fi
+
+        if [[ -n "$PROJECT_PROMPT_FILE" && ! -f "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE" ]]; then
+          echo "::error::The project changelog prompt file does not exist."
+          exit 1
+        fi
+        if ! git diff --quiet HEAD -- CHANGELOG.md; then
+          echo "::error::Commit the generated changelog before running the rewrite."
+          exit 1
+        fi
+
+        version="$(uv version --short)"
+        scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
+        {
+          printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
+          cat "$ACTION_PATH/base-prompt.md"
+          if [[ -n "$PROJECT_PROMPT_FILE" ]]; then
+            printf '\n## Project-specific editorial guidance\n\n'
+            cat "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE"
+          fi
+        } > "$scratch/prompt.md"
+        {
+          printf 'prompt-file=%s\n' "$scratch/prompt.md"
+          printf 'output-file=%s\n' "$scratch/section.md"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Rewrite changelog
+      uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+      with:
+        openai-api-key: ${{ inputs.openai-api-key }}
+        codex-version: ${{ inputs.codex-version }}
+        model: ${{ inputs.model }}
+        effort: ${{ inputs.effort }}
+        permission-profile: ":read-only"
+        safety-strategy: drop-sudo
+        prompt-file: ${{ steps.prepare.outputs.prompt-file }}
+        output-file: ${{ steps.prepare.outputs.output-file }}
+
+    - name: Upload Codex thread
+      if: ${{ always() && steps.prepare.outcome == 'success' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: codex-thread-release-prepare-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ~/.codex/sessions
+        if-no-files-found: warn
+
+    - name: Apply and commit changelog rewrite
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        CANDIDATE: ${{ steps.prepare.outputs.output-file }}
+      run: |
+        uv run --locked "$ACTION_PATH/update-latest-changelog-section.py" CHANGELOG.md "$CANDIDATE"
+        git diff --check -- CHANGELOG.md
+        if git diff --quiet -- CHANGELOG.md; then
+          echo "Codex left the generated changelog unchanged."
+        else
+          git -c core.hooksPath=/dev/null commit --only --message "Rewrite changelog" -- CHANGELOG.md
+        fi
