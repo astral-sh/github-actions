@@ -41,8 +41,16 @@ runs:
           exit 1
         fi
 
+        version="$(uv version --short)"
         scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
-        printf 'output-file=%s\n' "$scratch/section.md" >> "$GITHUB_OUTPUT"
+        {
+          printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
+          cat "$PROMPT_FILE"
+        } > "$scratch/prompt.md"
+        {
+          printf 'prompt-file=%s\n' "$scratch/prompt.md"
+          printf 'output-file=%s\n' "$scratch/section.md"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Rewrite changelog
       uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
@@ -53,7 +61,7 @@ runs:
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
-        prompt-file: ${{ github.workspace }}/${{ inputs.prompt-file }}
+        prompt-file: ${{ steps.prepare.outputs.prompt-file }}
         output-file: ${{ steps.prepare.outputs.output-file }}
 
     - name: Upload Codex thread

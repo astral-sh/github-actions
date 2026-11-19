@@ -18,8 +18,9 @@ needs to inspect.
 ```
 
 Keep the editorial prompt in the caller repository and pass its path relative
-to the workspace root. Ask Codex for the complete replacement release section,
-starting with the original level-two heading and release date.
+to the workspace root. The action prefixes the prompt with the release version
+from `uv version --short`. Ask Codex for the complete replacement release
+section, starting with the original level-two heading and release date.
 
 The optional `model`, `effort`, and `codex-version` inputs default to
 `gpt-6.2-sol`, `high`, and `0.170.0`. Choose an effort supported by the model
