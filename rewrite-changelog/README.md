@@ -17,10 +17,10 @@ needs to inspect.
     openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-Keep the editorial prompt in the caller repository and pass its path relative
-to the workspace root. The action prefixes the prompt with the release version
-from `uv version --short`. Ask Codex for the complete replacement release
-section, starting with the original level-two heading and release date.
+The action prefixes its [base prompt](base-prompt.md) with the release version
+from `uv version --short`. Set the optional `prompt-file` to append
+project-specific editorial guidance from a path relative to the workspace root.
+The base prompt defines the replacement section and its required heading and date.
 
 The optional `model`, `effort`, and `codex-version` inputs default to
 `gpt-6.2-sol`, `high`, and `0.170.0`. Choose an effort supported by the model

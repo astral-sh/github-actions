@@ -3,8 +3,8 @@ description: Editorialize the newest changelog section and commit it on the prep
 
 inputs:
   prompt-file:
-    description: Path to the repository's changelog prompt, relative to the workspace root.
-    required: true
+    description: Path to project-specific changelog guidance to append, relative to the workspace root.
+    required: false
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
     required: true
@@ -30,10 +30,11 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
-        PROMPT_FILE: ${{ github.workspace }}/${{ inputs.prompt-file }}
+        ACTION_PATH: ${{ github.action_path }}
+        PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
       run: |
-        if [[ ! -f "$PROMPT_FILE" ]]; then
-          echo "::error::The changelog prompt file does not exist."
+        if [[ -n "$PROJECT_PROMPT_FILE" && ! -f "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE" ]]; then
+          echo "::error::The project changelog prompt file does not exist."
           exit 1
         fi
         if ! git diff --quiet HEAD -- CHANGELOG.md; then
@@ -45,7 +46,11 @@ runs:
         scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
         {
           printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
-          cat "$PROMPT_FILE"
+          cat "$ACTION_PATH/base-prompt.md"
+          if [[ -n "$PROJECT_PROMPT_FILE" ]]; then
+            printf '\n## Project-specific editorial guidance\n\n'
+            cat "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE"
+          fi
         } > "$scratch/prompt.md"
         {
           printf 'prompt-file=%s\n' "$scratch/prompt.md"
