@@ -8,6 +8,14 @@ inputs:
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
     required: true
+  model:
+    description: Codex model to use for the rewrite.
+    required: false
+    default: gpt-6.2-sol
+  effort:
+    description: Reasoning effort supported by the selected model.
+    required: false
+    default: high
 
 runs:
   using: composite
@@ -36,8 +44,8 @@ runs:
       with:
         openai-api-key: ${{ inputs.openai-api-key }}
         codex-version: "0.170.0"
-        model: gpt-6.2-sol
-        effort: high
+        model: ${{ inputs.model }}
+        effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
         prompt-file: ${{ github.workspace }}/${{ inputs.prompt-file }}
