@@ -7,17 +7,19 @@ date, applies the replacement, and commits any change as `Rewrite changelog`
 using the caller's Git identity.
 
 Use an Ubuntu runner with Bash, Git, and uv. Check out the caller repository with
-full history at the workspace root. For ty, initialize the Ruff submodule and
-commit its updated pointer along with the generated changelog. The action reads
-the old and new pointers from the version bump commit.
+full history at the workspace root, including any submodules that the prompt
+needs to inspect.
 
 ```yaml
 - uses: astral-sh/github-actions/rewrite-changelog@<commit-sha>
   with:
-    project: ruff
+    prompt-file: agents/prompts/editorialize-changelog.md
     openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-Set `project` to `ruff` or `ty` to select the corresponding prompt.
+Keep the editorial prompt in the caller repository and pass its path relative
+to the workspace root. Ask Codex for the complete replacement release section,
+starting with the original level-two heading and release date.
+
 The action uses read-only Codex permissions and uploads the session as a workflow
 artifact. Keep the API key scoped to the trusted release preparation job.

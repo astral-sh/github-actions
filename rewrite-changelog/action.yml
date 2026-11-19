@@ -2,8 +2,8 @@ name: Rewrite release changelog
 description: Editorialize the newest changelog section and commit it on the prepared release branch.
 
 inputs:
-  project:
-    description: Project whose changelog guidance to use (ruff or ty).
+  prompt-file:
+    description: Path to the repository's changelog prompt, relative to the workspace root.
     required: true
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
@@ -12,17 +12,15 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Prepare Codex prompt
+    - name: Prepare changelog rewrite
       id: prepare
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
-        ACTION_PATH: ${{ github.action_path }}
-        PROJECT: ${{ inputs.project }}
+        PROMPT_FILE: ${{ github.workspace }}/${{ inputs.prompt-file }}
       run: |
-        project_prompt="$ACTION_PATH/prompts/$PROJECT.md"
-        if [[ ! "$PROJECT" =~ ^[a-z][a-z0-9-]*$ || ! -f "$project_prompt" ]]; then
-          echo "::error::Unknown changelog project."
+        if [[ ! -f "$PROMPT_FILE" ]]; then
+          echo "::error::The changelog prompt file does not exist."
           exit 1
         fi
         if ! git diff --quiet HEAD -- CHANGELOG.md; then
@@ -30,23 +28,8 @@ runs:
           exit 1
         fi
 
-        version="$(uv version --short)"
         scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
-        {
-          printf 'Release preparation for %s %s\n\n' "$PROJECT" "$version"
-          if [[ "$PROJECT" == ty ]]; then
-            old_ruff_commit="$(git rev-parse HEAD^:ruff)"
-            new_ruff_commit="$(git rev-parse HEAD:ruff)"
-            printf 'Ruff submodule range: %s..%s\n\n' "$old_ruff_commit" "$new_ruff_commit"
-          fi
-          cat "$ACTION_PATH/prompt.md"
-          printf '\n'
-          cat "$project_prompt"
-        } > "$scratch/prompt.md"
-        {
-          printf 'prompt-file=%s\n' "$scratch/prompt.md"
-          printf 'output-file=%s\n' "$scratch/section.md"
-        } >> "$GITHUB_OUTPUT"
+        printf 'output-file=%s\n' "$scratch/section.md" >> "$GITHUB_OUTPUT"
 
     - name: Rewrite changelog
       uses: openai/codex-action@c05cfd74ad95c626cdf05c6685e62becc3bf7813
@@ -57,7 +40,7 @@ runs:
         effort: high
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
-        prompt-file: ${{ steps.prepare.outputs.prompt-file }}
+        prompt-file: ${{ github.workspace }}/${{ inputs.prompt-file }}
         output-file: ${{ steps.prepare.outputs.output-file }}
 
     - name: Upload Codex thread
