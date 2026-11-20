@@ -1,0 +1,23 @@
+{
+  "ubuntu-x86_64-2": ["github-ubuntu-24.04-x86_64-2", "ubuntu-24.04"],
+  "ubuntu-x86_64-2-slim": ["github-ubuntu-24.04-x86_64-2", "ubuntu-slim"],
+  "ubuntu-x86_64-4": ["depot-ubuntu-24.04-4", "ubuntu-24.04"],
+  "ubuntu-x86_64-4-github": ["github-ubuntu-24.04-x86_64-4", "ubuntu-24.04"],
+  "ubuntu-x86_64-8": ["depot-ubuntu-24.04-8", "ubuntu-24.04"],
+  "ubuntu-x86_64-8-github": ["github-ubuntu-24.04-x86_64-8", "ubuntu-24.04"],
+  "ubuntu-x86_64-16": ["depot-ubuntu-24.04-16", "ubuntu-24.04"],
+  "ubuntu-aarch64-2": ["github-ubuntu-24.04-aarch64-2", "ubuntu-24.04-arm"],
+  "ubuntu-aarch64-4": ["github-ubuntu-24.04-aarch64-4", "ubuntu-24.04-arm"],
+  "ubuntu-aarch64-pgo": ["depot-ubuntu-24.04-arm-16"],
+  "ubuntu-x86_64-codspeed": ["codspeed-macro-x64-ryzen-9950x-ubuntu-24-04"],
+  "macos-aarch64-8": ["namespace-profile-macos-15", "macos-15"],
+  "windows-x86_64-4": [
+    "namespace-profile-windows-2022-x86-64-4",
+    "windows-2025"
+  ],
+  "windows-x86_64-16": [
+    "namespace-profile-windows-2022-x86-64-16x32",
+    "windows-2025"
+  ],
+  "windows-aarch64-8": ["github-windows-11-aarch64-8", "windows-11-arm"]
+}

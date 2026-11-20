@@ -2,6 +2,8 @@
 
 Shared GitHub Actions for Astral projects.
 
+- [Select runners](select-runners/) chooses GitHub, Depot, and Namespace runners
+  for named roles and selects GitHub-hosted alternatives for forks.
 - [Simple token service](simple-token-service/): exchange GitHub Actions OIDC tokens
   for scoped GitHub App installation tokens.
 - [Key-value store](key-value-store/): share workflow state within a GitHub Actions
