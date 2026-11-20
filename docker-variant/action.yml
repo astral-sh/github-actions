@@ -1,0 +1,41 @@
+name: "Prepare Docker image variant"
+description: "Generate a Dockerfile and aliases for an Astral image variant containing the selected binaries."
+
+inputs:
+  image-mapping:
+    description: "Base image followed by one or more comma-separated image aliases."
+    required: true
+  source-image:
+    description: "Image containing the binaries, preferably pinned to a digest."
+    required: true
+  binaries:
+    description: "Space-separated binary names at the root of the source image."
+    required: true
+  dockerfile-lines:
+    description: "Additional Dockerfile instructions after copying the binaries."
+    default: ""
+
+outputs:
+  name:
+    description: "First image alias, used as the manifest record name."
+    value: ${{ steps.prepare.outputs.name }}
+  file:
+    description: "Generated Dockerfile path."
+    value: ${{ steps.prepare.outputs.file }}
+  aliases:
+    description: "Newline-separated variant aliases for `docker-build`."
+    value: ${{ steps.prepare.outputs.aliases }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Generate Dockerfile and aliases"
+      id: prepare
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        IMAGE_MAPPING: ${{ inputs.image-mapping }}
+        SOURCE_IMAGE: ${{ inputs.source-image }}
+        BINARIES: ${{ inputs.binaries }}
+        DOCKERFILE_LINES: ${{ inputs.dockerfile-lines }}
+      run: bash "$ACTION_PATH/prepare.sh"

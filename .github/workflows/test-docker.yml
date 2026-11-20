@@ -1,0 +1,136 @@
+name: "Test Docker actions"
+
+on:
+  pull_request:
+    paths:
+      - "docker-*/**"
+      - "tests/**"
+      - ".github/workflows/test-docker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-*/**"
+      - "tests/**"
+      - ".github/workflows/test-docker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests
+      - run: shellcheck docker-*/*.sh
+
+  metadata:
+    name: metadata (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: base release
+            mode: release
+            version: 1.2.3
+            aliases: ""
+            tags: "1.2.3,1.2,latest"
+            label: "1.2.3"
+          - name: base prerelease
+            mode: release
+            version: 1.2.3rc1
+            aliases: ""
+            tags: "1.2.3rc1"
+            label: "1.2.3rc1"
+          - name: base postrelease
+            mode: release
+            version: 1.2.3.post1
+            aliases: ""
+            tags: "1.2.3.post1"
+            label: "1.2.3.post1"
+          - name: base development version
+            mode: release
+            version: 1.2.3.dev1
+            aliases: ""
+            tags: "1.2.3.dev1"
+            label: "1.2.3.dev1"
+          - name: base development
+            mode: development
+            version: ""
+            aliases: ""
+            tags: "sha-$SHA"
+            label: "sha-$SHA"
+          - name: base dry-run
+            mode: dry-run
+            version: ""
+            aliases: ""
+            tags: "dry-run"
+            label: "dry-run"
+          - name: variant release
+            mode: release
+            version: 1.2.3
+            aliases: "alpine3.23\nalpine"
+            tags: "1.2.3-alpine3.23,1.2-alpine3.23,alpine3.23,1.2.3-alpine,1.2-alpine,alpine"
+            label: "1.2.3-alpine3.23"
+          - name: variant prerelease
+            mode: release
+            version: 1.2.3rc1
+            aliases: "alpine3.23\nalpine"
+            tags: "1.2.3rc1-alpine3.23,alpine3.23,1.2.3rc1-alpine,alpine"
+            label: "1.2.3rc1-alpine3.23"
+          - name: variant development
+            mode: development
+            version: ""
+            aliases: "alpine3.23\nalpine"
+            tags: "sha-$SHA-alpine3.23,sha-$SHA-alpine"
+            label: "sha-$SHA-alpine3.23"
+          - name: variant dry-run
+            mode: dry-run
+            version: ""
+            aliases: "alpine3.23\nalpine"
+            tags: "alpine3.23,alpine"
+            label: "alpine3.23"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generate tag rules
+        id: rules
+        working-directory: ${{ runner.temp }}
+        env:
+          ACTION_PATH: ${{ github.workspace }}/docker-build
+          MODE: ${{ matrix.mode }}
+          VERSION: ${{ matrix.version }}
+          ALIASES: ${{ matrix.aliases }}
+        run: |
+          printf '[project]\nversion = "%s"\n' "$VERSION" > pyproject.toml
+          python3 "$ACTION_PATH/metadata.py"
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        id: metadata
+        with:
+          images: ghcr.io/astral-sh/test
+          tags: ${{ steps.rules.outputs.tags }}
+          flavor: ${{ steps.rules.outputs.flavor }}
+      - name: Check tags and version label
+        env:
+          METADATA: ${{ steps.metadata.outputs.json }}
+          EXPECTED_TAGS: ${{ matrix.tags }}
+          EXPECTED_LABEL: ${{ matrix.label }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          metadata = json.loads(os.environ["METADATA"])
+          sha = os.environ["GITHUB_SHA"][:7]
+          expected_tags = {
+              f"ghcr.io/astral-sh/test:{tag}"
+              for tag in os.environ["EXPECTED_TAGS"].replace("$SHA", sha).split(",")
+          }
+          assert set(metadata["tags"]) == expected_tags, metadata["tags"]
+          expected_label = os.environ["EXPECTED_LABEL"].replace("$SHA", sha)
+          assert metadata["labels"]["org.opencontainers.image.version"] == expected_label, metadata["labels"]
+          PY

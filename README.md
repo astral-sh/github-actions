@@ -16,6 +16,8 @@ Shared GitHub Actions for Astral projects.
   latest release notes.
 - [Create release pull request](create-release-pr/): commit prepared release files
   and create or update a pull request.
+- [Docker build and publication](docker-build/README.md): plan, version-check,
+  build, and publish Astral images with Depot and standard tags.
 - [Release smoke test](release-smoke-test/): test release artifacts in disposable containers.
 - [Upload to R2](upload-r2/): publish local files to Cloudflare R2.
 - [PR security review](security-pr-review/): review pull requests with Codex Security.
