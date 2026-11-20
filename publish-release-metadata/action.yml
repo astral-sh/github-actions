@@ -1,0 +1,70 @@
+name: "Publish release metadata"
+description: "Open or update an Astral versions pull request from prepared NDJSON."
+
+inputs:
+  project:
+    description: "Versions project name (the basename of the NDJSON file in v1/)."
+    required: true
+  release:
+    description: "Release identifier used for the branch, commit, and pull request."
+    required: true
+  metadata-file:
+    description: "Path to prepared release metadata in NDJSON format."
+    required: true
+  sts-api-url:
+    description: "HTTPS base URL and OIDC audience of the release token service."
+    required: true
+  merge-mode:
+    description: "Whether to leave the pull request for review or immediately admin-squash it."
+    default: review
+
+outputs:
+  changed:
+    description: "Whether the proposed metadata differs from the versions main branch."
+    value: ${{ steps.prepare.outputs.changed }}
+  pull-request-url:
+    description: "Pull request URL, or empty when the metadata is already published."
+    value: ${{ steps.publish.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Prepare versions update"
+      id: prepare
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PROJECT: ${{ inputs.project }}
+        RELEASE: ${{ inputs.release }}
+        METADATA_FILE: ${{ inputs.metadata-file }}
+        MERGE_MODE: ${{ inputs.merge-mode }}
+      run: bash "$GITHUB_ACTION_PATH/prepare.sh"
+
+    - name: "Get versions token"
+      id: token
+      if: steps.prepare.outputs.changed == 'true'
+      uses: $/simple-token-service
+      with:
+        exchange-url: ${{ inputs.sts-api-url }}/exchange
+        audience: ${{ inputs.sts-api-url }}
+        repository: astral-sh/versions
+        permissions: |
+          contents: write
+          pull_requests: write
+
+    - name: "Publish versions pull request"
+      id: publish
+      if: steps.prepare.outputs.changed == 'true'
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        RELEASE: ${{ inputs.release }}
+        MERGE_MODE: ${{ inputs.merge-mode }}
+        STAGING_DIR: ${{ steps.prepare.outputs.staging-dir }}
+        BRANCH: ${{ steps.prepare.outputs.branch }}
+        EXPECTED_HEAD: ${{ steps.prepare.outputs.expected-head }}
+        GH_HOST: github.com
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        GH_PROMPT_DISABLED: '1'
+        GIT_TERMINAL_PROMPT: '0'
+      run: bash "$GITHUB_ACTION_PATH/publish.sh"
