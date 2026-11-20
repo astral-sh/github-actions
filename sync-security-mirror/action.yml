@@ -1,0 +1,29 @@
+name: Sync a security mirror
+description: Fast-forward a GitHub security mirror's main branch to a commit from public main.
+
+inputs:
+  source-repository:
+    description: Public GitHub repository in owner/name form.
+    default: ${{ github.repository }}
+  source-sha:
+    description: Full commit SHA on the source repository's main branch.
+    default: ${{ github.sha }}
+  destination-repository:
+    description: Security mirror repository in owner/name form.
+    required: true
+  token:
+    description: GitHub App installation token scoped to the destination repository.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Fast-forward security mirror
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+        SOURCE_SHA: ${{ inputs.source-sha }}
+        DESTINATION_REPOSITORY: ${{ inputs.destination-repository }}
+        DESTINATION_TOKEN: ${{ inputs.token }}
+      run: bash "$ACTION_PATH/sync.sh"
