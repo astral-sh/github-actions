@@ -1,0 +1,27 @@
+name: Configure a branch-scoped GitHub proxy
+description: Configure Git to push through a short-lived, exact-branch GitHub proxy capability.
+
+inputs:
+  proxy-url:
+    description: HTTPS origin of the deployed GitHub proxy.
+    required: true
+  capability:
+    description: Encrypted branch-scoped capability issued by the token service.
+    required: true
+  repository:
+    description: GitHub repository authorized by the capability, in OWNER/REPO form.
+    required: true
+  remote:
+    description: Git remote whose push URL should use the proxy.
+    required: false
+    default: origin
+
+outputs:
+  git-url:
+    description: Credential-free HTTPS push URL for the configured repository.
+
+runs:
+  using: node24
+  main: action/main.js
+  post: action/post.js
+  post-if: always()

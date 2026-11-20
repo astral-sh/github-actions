@@ -4,6 +4,8 @@ Shared GitHub Actions for Astral projects.
 
 - [Simple token service](simple-token-service/): exchange GitHub Actions OIDC tokens
   for scoped GitHub App installation tokens.
+- [GitHub proxy](github-proxy/): configure Git pushes through a branch-scoped proxy
+  capability.
 - [Key-value store](key-value-store/): share workflow state within a GitHub Actions
   OIDC namespace.
 - [AI policy](ai-policy/): post the AI policy reminder and optionally close an
