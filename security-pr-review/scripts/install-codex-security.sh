@@ -6,9 +6,9 @@ codex_home="${1:?Codex home directory is required}"
 mkdir -p "$RUNNER_TEMP/codex-security"
 curl --fail --location --silent --show-error \
   --output "$RUNNER_TEMP/codex.tar.gz" \
-  https://github.com/openai/codex/releases/download/rust-v0.153.4/codex-x86_64-unknown-linux-musl.tar.gz
+  https://github.com/openai/codex/releases/download/rust-v0.171.0/codex-x86_64-unknown-linux-musl.tar.gz
 printf '%s  %s\n' \
-  f479424eca092484dc40d87ae28c44f4cc40234a60045d6131e493800d814a30 \
+  01baa2e47809f8597be5b2f8abd4e4dfe3fb5bcb6e504c2fbaaad97056c15e8d \
   "$RUNNER_TEMP/codex.tar.gz" | sha256sum --check
 tar --extract --gzip --file "$RUNNER_TEMP/codex.tar.gz" --directory "$RUNNER_TEMP"
 codex="$RUNNER_TEMP/codex-x86_64-unknown-linux-musl"
