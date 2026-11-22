@@ -31,10 +31,14 @@ Set `web-search: "true"` to let Codex look up and verify links to official
 documentation for the rewritten changelog. Web search is disabled by default.
 Codex has read-only access to the checkout in both modes.
 
-The optional `model`, `effort`, and `codex-version` inputs default to
-`gpt-6.2-sol`, `high`, and `0.170.0`. Choose an effort supported by the model
-and a CLI version compatible with the pinned Codex Action. The `codex-version`
-input selects the version of both the CLI and the Responses API proxy.
+The optional `model` input defaults to `gpt-5.5` when web search is enabled
+and `gpt-6.2-sol` otherwise. If you override the model with web search enabled,
+choose one that supports hosted web search.
+
+The optional `effort` and `codex-version` inputs default to `high` and
+`0.170.0`. Choose an effort supported by the model and a CLI version compatible
+with the pinned Codex Action. The `codex-version` input selects the version of
+both the CLI and the Responses API proxy.
 
 The action uses read-only Codex permissions and uploads the session as a workflow
 artifact. Keep the API key scoped to the trusted release preparation job.

@@ -13,9 +13,8 @@ inputs:
     description: OpenAI API key for the Codex rewrite.
     required: true
   model:
-    description: Codex model to use for the rewrite.
+    description: Codex model to use for the rewrite. With web search enabled, choose a model that supports hosted web search.
     required: false
-    default: gpt-6.2-sol
   effort:
     description: Reasoning effort supported by the selected model.
     required: false
@@ -52,8 +51,14 @@ runs:
           exit 1
         fi
         case "$WEB_SEARCH" in
-          true) web_search_mode=live ;;
-          false) web_search_mode=disabled ;;
+          true)
+            web_search_mode=live
+            default_model=gpt-5.5
+            ;;
+          false)
+            web_search_mode=disabled
+            default_model=gpt-6.2-sol
+            ;;
           *)
             echo "::error::web-search must be true or false."
             exit 1
@@ -78,6 +83,7 @@ runs:
           printf 'prompt-file=%s\n' "$scratch/prompt.md"
           printf 'output-file=%s\n' "$scratch/section.md"
           printf 'web-search-mode=%s\n' "$web_search_mode"
+          printf 'default-model=%s\n' "$default_model"
         } >> "$GITHUB_OUTPUT"
 
     - name: Rewrite changelog
@@ -85,7 +91,7 @@ runs:
       with:
         openai-api-key: ${{ inputs.openai-api-key }}
         codex-version: ${{ inputs.codex-version }}
-        model: ${{ inputs.model }}
+        model: ${{ inputs.model || steps.prepare.outputs.default-model }}
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
