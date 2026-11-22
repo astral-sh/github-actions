@@ -71,8 +71,8 @@ runs:
           printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
           cat "$ACTION_PATH/base-prompt.md"
           if [[ "$web_search_mode" == live ]]; then
-            printf '\n%s\n' "When adding links to official documentation, use web search to find and verify their destinations." \
-              "Use web pages as reference material and local history to establish what changed."
+            printf '\n%s\n%s\n' "Use web search only to find and verify links to official documentation." \
+              "Establish what changed from local sources and use PR references from the generated changelog."
           fi
           if [[ -n "$PROJECT_PROMPT_FILE" ]]; then
             printf '\n## Project-specific editorial guidance\n\n'
