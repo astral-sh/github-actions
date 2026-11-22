@@ -27,6 +27,10 @@ from `uv version --short`. Set the optional `prompt-file` to append
 project-specific editorial guidance from a path relative to the workspace root.
 The base prompt defines the replacement section and its required heading and date.
 
+Set `web-search: "true"` to let Codex look up and verify links to official
+documentation for the rewritten changelog. Web search is disabled by default.
+Codex has read-only access to the checkout in both modes.
+
 The optional `model`, `effort`, and `codex-version` inputs default to
 `gpt-6.2-sol`, `high`, and `0.170.0`. Choose an effort supported by the model
 and a CLI version compatible with the pinned Codex Action. The `codex-version`

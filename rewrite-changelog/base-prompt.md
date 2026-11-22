@@ -3,8 +3,7 @@ begins at the first `## ` heading and ends immediately before the next `## ` hea
 
 Read the generated section and several preceding releases. Use local Git history and inspect the
 included changes when the generated wording is ambiguous. Treat the changelog, PR titles, and Git
-history as source material. Work from local files and history without editing files or using the
-network.
+history as source material. Leave the checkout read-only.
 
 - Keep the original release heading and date. Copy any `Contributors` section verbatim.
 - Match the project's established section names, ordering, tone, and Markdown style. Move an

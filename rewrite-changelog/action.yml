@@ -5,6 +5,10 @@ inputs:
   prompt-file:
     description: Path to project-specific changelog guidance to append, relative to the workspace root.
     required: false
+  web-search:
+    description: Enable Codex web search for finding and verifying official documentation links.
+    required: false
+    default: "false"
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
     required: true
@@ -32,6 +36,7 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
+        WEB_SEARCH: ${{ inputs.web-search }}
       run: |
         if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
           echo "::error::rewrite-changelog must run in a job without id-token: write. Move the token exchange and push to a separate job."
@@ -46,12 +51,24 @@ runs:
           echo "::error::Commit the generated changelog before running the rewrite."
           exit 1
         fi
+        case "$WEB_SEARCH" in
+          true) web_search_mode=live ;;
+          false) web_search_mode=disabled ;;
+          *)
+            echo "::error::web-search must be true or false."
+            exit 1
+            ;;
+        esac
 
         version="$(uv version --short)"
         scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
         {
           printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
           cat "$ACTION_PATH/base-prompt.md"
+          if [[ "$web_search_mode" == live ]]; then
+            printf '\n%s\n' "When adding links to official documentation, use web search to find and verify their destinations." \
+              "Use web pages as reference material and local history to establish what changed."
+          fi
           if [[ -n "$PROJECT_PROMPT_FILE" ]]; then
             printf '\n## Project-specific editorial guidance\n\n'
             cat "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE"
@@ -60,6 +77,7 @@ runs:
         {
           printf 'prompt-file=%s\n' "$scratch/prompt.md"
           printf 'output-file=%s\n' "$scratch/section.md"
+          printf 'web-search-mode=%s\n' "$web_search_mode"
         } >> "$GITHUB_OUTPUT"
 
     - name: Rewrite changelog
@@ -71,6 +89,7 @@ runs:
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
+        codex-args: '["-c", "web_search=\"${{ steps.prepare.outputs.web-search-mode }}\""]'
         prompt-file: ${{ steps.prepare.outputs.prompt-file }}
         output-file: ${{ steps.prepare.outputs.output-file }}
 
