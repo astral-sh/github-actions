@@ -5,13 +5,19 @@ inputs:
   prompt-file:
     description: Path to project-specific changelog guidance to append, relative to the workspace root.
     required: false
+  web-search:
+    description: Enable Codex web search for finding and verifying official documentation links.
+    required: false
+    default: "false"
+  web-search-allowed-domains:
+    description: JSON array of documentation hostnames. Required when web search is enabled.
+    required: false
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
     required: true
   model:
-    description: Codex model to use for the rewrite.
+    description: Codex model to use for the rewrite. With web search enabled, choose a model that supports hosted web search.
     required: false
-    default: gpt-6.2-sol
   effort:
     description: Reasoning effort supported by the selected model.
     required: false
@@ -32,6 +38,8 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
+        WEB_SEARCH: ${{ inputs.web-search }}
+        WEB_SEARCH_ALLOWED_DOMAINS: ${{ inputs.web-search-allowed-domains }}
       run: |
         if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
           echo "::error::rewrite-changelog must run in a job without id-token: write. Move the token exchange and push to a separate job."
@@ -46,12 +54,34 @@ runs:
           echo "::error::Commit the generated changelog before running the rewrite."
           exit 1
         fi
+        case "$WEB_SEARCH" in
+          true)
+            if [[ -z "$WEB_SEARCH_ALLOWED_DOMAINS" ]]; then
+              echo "::error::web-search-allowed-domains is required when web-search is true."
+              exit 1
+            fi
+            web_search_mode=live
+            default_model=gpt-5.5
+            ;;
+          false)
+            web_search_mode=disabled
+            default_model=gpt-6.2-sol
+            ;;
+          *)
+            echo "::error::web-search must be true or false."
+            exit 1
+            ;;
+        esac
 
         version="$(uv version --short)"
         scratch="$(mktemp -d "$RUNNER_TEMP/rewrite-changelog.XXXXXX")"
         {
           printf 'Release preparation for %s: Rewrite changelog\n\n' "$version"
           cat "$ACTION_PATH/base-prompt.md"
+          if [[ "$web_search_mode" == live ]]; then
+            printf '\n%s\n%s\n' "Use web search only to find and verify links to official documentation." \
+              "Establish what changed from local sources and use PR references from the generated changelog."
+          fi
           if [[ -n "$PROJECT_PROMPT_FILE" ]]; then
             printf '\n## Project-specific editorial guidance\n\n'
             cat "$GITHUB_WORKSPACE/$PROJECT_PROMPT_FILE"
@@ -60,6 +90,8 @@ runs:
         {
           printf 'prompt-file=%s\n' "$scratch/prompt.md"
           printf 'output-file=%s\n' "$scratch/section.md"
+          printf 'web-search-mode=%s\n' "$web_search_mode"
+          printf 'default-model=%s\n' "$default_model"
         } >> "$GITHUB_OUTPUT"
 
     - name: Rewrite changelog
@@ -67,10 +99,15 @@ runs:
       with:
         openai-api-key: ${{ inputs.openai-api-key }}
         codex-version: ${{ inputs.codex-version }}
-        model: ${{ inputs.model }}
+        model: ${{ inputs.model || steps.prepare.outputs.default-model }}
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
+        codex-args: >-
+          ${{ steps.prepare.outputs.web-search-mode == 'live'
+              && format('["-c", "web_search=\"live\"", "-c", {0}]',
+                toJSON(format('tools.web_search.allowed_domains={0}', inputs.web-search-allowed-domains)))
+              || '["-c", "web_search=\"disabled\""]' }}
         prompt-file: ${{ steps.prepare.outputs.prompt-file }}
         output-file: ${{ steps.prepare.outputs.output-file }}
 
