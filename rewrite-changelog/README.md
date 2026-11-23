@@ -31,6 +31,31 @@ Set `web-search: "true"` to let Codex look up and verify links to official
 documentation for the rewritten changelog. Web search is disabled by default.
 Codex has read-only access to the checkout in both modes.
 
+When enabling web search, set `web-search-allowed-domains` to a JSON array of
+documentation hostnames, such as `docs.python.org`. Codex's web search filter
+allows each listed hostname and its subdomains. This example lets ty's editor
+look up the Microsoft Language Server Protocol specification, the Python typing
+specification and standard library docs, and the docs for attrs, Django, Pydantic,
+and pytest.
+
+```yaml
+- uses: astral-sh/github-actions/rewrite-changelog@<commit-sha>
+  with:
+    prompt-file: agents/prompts/editorialize-changelog.md
+    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+    web-search: "true"
+    web-search-allowed-domains: |
+      [
+        "microsoft.github.io",
+        "typing.python.org",
+        "docs.python.org",
+        "www.attrs.org",
+        "docs.djangoproject.com",
+        "pydantic.dev",
+        "docs.pytest.org"
+      ]
+```
+
 The optional `model` input defaults to `gpt-5.5` when web search is enabled
 and `gpt-6.2-sol` otherwise. If you override the model with web search enabled,
 choose one that supports hosted web search.

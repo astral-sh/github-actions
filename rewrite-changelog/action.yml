@@ -9,6 +9,9 @@ inputs:
     description: Enable Codex web search for finding and verifying official documentation links.
     required: false
     default: "false"
+  web-search-allowed-domains:
+    description: JSON array of documentation hostnames. Required when web search is enabled.
+    required: false
   openai-api-key:
     description: OpenAI API key for the Codex rewrite.
     required: true
@@ -36,6 +39,7 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         PROJECT_PROMPT_FILE: ${{ inputs.prompt-file }}
         WEB_SEARCH: ${{ inputs.web-search }}
+        WEB_SEARCH_ALLOWED_DOMAINS: ${{ inputs.web-search-allowed-domains }}
       run: |
         if [[ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
           echo "::error::rewrite-changelog must run in a job without id-token: write. Move the token exchange and push to a separate job."
@@ -52,6 +56,10 @@ runs:
         fi
         case "$WEB_SEARCH" in
           true)
+            if [[ -z "$WEB_SEARCH_ALLOWED_DOMAINS" ]]; then
+              echo "::error::web-search-allowed-domains is required when web-search is true."
+              exit 1
+            fi
             web_search_mode=live
             default_model=gpt-5.5
             ;;
@@ -95,7 +103,11 @@ runs:
         effort: ${{ inputs.effort }}
         permission-profile: ":read-only"
         safety-strategy: drop-sudo
-        codex-args: '["-c", "web_search=\"${{ steps.prepare.outputs.web-search-mode }}\""]'
+        codex-args: >-
+          ${{ steps.prepare.outputs.web-search-mode == 'live'
+              && format('["-c", "web_search=\"live\"", "-c", {0}]',
+                toJSON(format('tools.web_search.allowed_domains={0}', inputs.web-search-allowed-domains)))
+              || '["-c", "web_search=\"disabled\""]' }}
         prompt-file: ${{ steps.prepare.outputs.prompt-file }}
         output-file: ${{ steps.prepare.outputs.output-file }}
 
